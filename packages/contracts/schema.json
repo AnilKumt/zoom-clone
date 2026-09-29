@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ZoomCloneContracts",
+  "definitions": {
+    "Meeting": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "meeting_code": { "type": "string", "pattern": "^[0-9]{10}$" },
+        "title": { "type": "string" },
+        "status": { "type": "string", "enum": ["scheduled", "live", "ended", "cancelled"] },
+        "kind": { "type": "string", "enum": ["instant", "scheduled", "personal"] },
+        "scheduled_start_at": { "type": ["string", "null"], "format": "date-time" },
+        "duration_minutes": { "type": ["integer", "null"] },
+        "invite_url": { "type": "string" }
+      },
+      "required": ["id", "meeting_code", "title", "status", "kind"]
+    },
+    "WsEnvelope": {
+      "type": "object",
+      "properties": {
+        "v": { "type": "integer", "default": 1 },
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "ts": { "type": "string", "format": "date-time" },
+        "payload": { "type": "object" }
+      },
+      "required": ["v", "type", "payload"]
+    }
+  }
+}
