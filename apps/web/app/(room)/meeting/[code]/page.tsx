@@ -971,16 +971,16 @@ export default function MeetingRoomPage() {
               </button>
 
               {showEndMenu && (
-                <div className="absolute bottom-14 right-0 z-50 w-48 rounded-card bg-[#242424] p-1.5 shadow-2xl border border-white/10 text-xs">
+                <div className="absolute bottom-14 right-0 z-50 w-52 rounded-2xl bg-[#242424] p-2 shadow-2xl border border-white/10 text-xs animate-scale-in">
                   <button
                     onClick={handleEndMeeting}
-                    className="w-full rounded px-3 py-2 text-left font-semibold text-red-400 hover:bg-white/10 transition-colors"
+                    className="w-full rounded-xl px-3 py-2 text-left font-bold text-red-400 hover:bg-white/10 transition-colors"
                   >
                     End Meeting for All
                   </button>
                   <button
                     onClick={handleLeaveMeeting}
-                    className="w-full rounded px-3 py-2 text-left text-white hover:bg-white/10 transition-colors"
+                    className="w-full rounded-xl px-3 py-2 text-left text-white/90 hover:bg-white/10 transition-colors"
                   >
                     Leave Meeting
                   </button>
@@ -990,7 +990,7 @@ export default function MeetingRoomPage() {
           ) : (
             <button
               onClick={handleLeaveMeeting}
-              className="rounded-control bg-[var(--zoom-red)] hover:bg-red-700 px-4 py-2 text-sm font-semibold text-white shadow-md transition-colors"
+              className="rounded-full bg-[var(--zoom-red)] hover:bg-red-700 px-5 py-2 text-xs font-bold text-white shadow-md active:scale-95 transition-all"
             >
               Leave
             </button>
@@ -1017,19 +1017,19 @@ function ToolbarButton({
   return (
     <button
       onClick={onClick}
-      className={`relative flex flex-col items-center justify-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-white/10 ${
-        active ? 'text-[var(--zoom-red)]' : 'text-white/85'
+      className={`relative flex flex-col items-center justify-center gap-1 rounded-2xl px-3 py-1.5 text-xs font-medium transition-all duration-150 hover:bg-white/10 active:scale-90 ${
+        active ? 'text-[var(--zoom-red)]' : 'text-white/90'
       }`}
     >
       <div className="relative">
         {icon}
         {badge !== undefined && badge > 0 && (
-          <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--zoom-red)] px-1 text-[10px] font-bold text-white shadow">
+          <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--zoom-red)] px-1 text-[10px] font-bold text-white shadow-md">
             {badge}
           </span>
         )}
       </div>
-      <span className="text-[11px] leading-none">{label}</span>
+      <span className="text-[11px] leading-none tracking-tight font-medium">{label}</span>
     </button>
   );
 }

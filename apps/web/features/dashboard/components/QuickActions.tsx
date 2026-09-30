@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Calendar, Plus, Camera, Copy, Check } from 'lucide-react';
+import { Calendar, Plus, Camera, Copy, Check, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { apiClient } from '@/lib/api-client';
@@ -9,7 +9,7 @@ import { formatMeetingId } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ROUTES } from '@/constants/routes';
 
-// Quick action tiles + Personal Meeting ID — matches Zoom portal home right column
+// Quick action tiles + Personal Meeting ID with MD3 feel and micro-interactions
 export function QuickActions() {
   const router = useRouter();
   const { user } = useAuth();
@@ -33,53 +33,53 @@ export function QuickActions() {
     const pmi = user?.personal_meeting_id ?? '';
     await navigator.clipboard.writeText(formatMeetingId(pmi));
     setCopied(true);
-    toast.success('Copied');
+    toast.success('Meeting ID copied to clipboard');
     setTimeout(() => setCopied(false), 2000);
   };
 
   const tiles = [
     {
-      icon: <Calendar size={28} className="text-white" />,
+      icon: <Calendar size={30} className="text-white transition-transform group-hover:scale-110 duration-200" />,
       label: 'Schedule',
       bg: 'var(--zoom-blue)',
       onClick: () => router.push(ROUTES.SCHEDULE),
-      tooltip: 'Schedule a meeting',
+      tooltip: 'Schedule a future meeting',
     },
     {
-      icon: <Plus size={28} className="text-white" />,
+      icon: <Plus size={32} className="text-white transition-transform group-hover:scale-110 duration-200" />,
       label: 'Join',
       bg: 'var(--zoom-blue)',
       onClick: () => router.push(ROUTES.JOIN),
-      tooltip: 'Join a meeting',
+      tooltip: 'Join with Meeting ID',
     },
     {
-      icon: <Camera size={28} className="text-white" />,
+      icon: <Camera size={30} className="text-white transition-transform group-hover:scale-110 duration-200" />,
       label: 'New Meeting',
       bg: 'var(--zoom-orange)',
       onClick: handleNewMeeting,
-      tooltip: 'Host a meeting',
+      tooltip: 'Start instant meeting',
     },
   ];
 
   return (
-    <div className="card p-6">
+    <div className="card p-7 shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)] transition-all duration-300">
       {/* Quick action tiles */}
-      <div className="flex justify-center gap-6 mb-6">
+      <div className="flex justify-around items-center mb-6">
         {tiles.map((tile) => (
           <button
             key={tile.label}
             onClick={tile.onClick}
             title={tile.tooltip}
             disabled={tile.label === 'New Meeting' && loading}
-            className="flex flex-col items-center gap-2 disabled:opacity-60"
+            className="group flex flex-col items-center gap-2.5 focus-visible:outline-none disabled:opacity-60"
           >
             <div
-              className="flex h-16 w-16 items-center justify-center rounded-2xl transition-opacity hover:opacity-90"
+              className="flex h-20 w-20 items-center justify-center rounded-[24px] shadow-md group-hover:shadow-xl group-hover:-translate-y-1.5 group-active:scale-95 transition-all duration-200 ease-out"
               style={{ background: tile.bg }}
             >
               {tile.icon}
             </div>
-            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+            <span className="text-xs font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
               {tile.label}
             </span>
           </button>
@@ -87,26 +87,36 @@ export function QuickActions() {
       </div>
 
       {/* Divider */}
-      <div className="border-t" style={{ borderColor: 'var(--border)' }} />
+      <div className="border-t my-4" style={{ borderColor: 'var(--border)' }} />
 
       {/* Personal Meeting ID */}
-      <div className="mt-4">
-        <h3 className="text-lg font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
-          Personal Meeting ID
-        </h3>
-        <div className="flex items-center gap-2">
-          <span className="text-base font-mono" style={{ color: 'var(--text-secondary)' }}>
+      <div className="pt-2">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+            Personal Meeting ID (PMI)
+          </h3>
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--surface-tonal)] text-[var(--text-secondary)]">
+            Permanent
+          </span>
+        </div>
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-[var(--surface-tonal)] border border-slate-100">
+          <span className="text-base font-bold font-mono tracking-wide" style={{ color: 'var(--text-primary)' }}>
             {formatMeetingId(user?.personal_meeting_id ?? '000 000 0000')}
           </span>
           <button
             onClick={handleCopyPmi}
             aria-label="Copy Personal Meeting ID"
-            className="p-1 rounded hover:bg-gray-100 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-white shadow-xs hover:shadow-sm hover:bg-slate-50 active:scale-95 transition-all"
+            style={{ color: copied ? 'var(--zoom-green)' : 'var(--zoom-blue)' }}
           >
             {copied ? (
-              <Check size={16} style={{ color: 'var(--zoom-green)' }} />
+              <>
+                <Check size={14} /> Copied
+              </>
             ) : (
-              <Copy size={16} style={{ color: 'var(--zoom-blue)' }} />
+              <>
+                <Copy size={14} /> Copy ID
+              </>
             )}
           </button>
         </div>

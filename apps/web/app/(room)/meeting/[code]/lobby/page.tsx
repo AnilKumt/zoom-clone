@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Mic, MicOff, Video, VideoOff, Settings, Shield } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Settings, Shield, Sparkles } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
@@ -133,22 +133,22 @@ export default function LobbyPage() {
     <div className="flex min-h-dvh flex-col items-center justify-center bg-[var(--room-bg)] p-4 text-white">
       <div className="w-full max-w-4xl">
         <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xl font-bold tracking-tight">
+          <div className="flex items-center gap-2 text-2xl font-black tracking-tight">
             <span style={{ color: 'var(--zoom-blue)' }}>zoom</span>
-            <span className="text-white/80 text-sm font-normal">| Meeting ID: {formatMeetingId(code)}</span>
+            <span className="text-white/60 text-xs font-mono font-medium">| ID: {formatMeetingId(code)}</span>
           </div>
           {meetingInfo?.title && (
-            <div className="flex items-center gap-2 rounded-pill bg-white/10 px-3 py-1 text-xs font-medium text-white/80">
-              <Shield size={12} className="text-[var(--zoom-green)]" />
+            <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-xs font-bold text-white/90 backdrop-blur-md">
+              <Shield size={14} className="text-[var(--zoom-green)]" />
               {meetingInfo.title}
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_360px] gap-8 items-center bg-[#242424] rounded-2xl p-6 sm:p-8 shadow-2xl border border-white/10">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_360px] gap-8 items-center bg-[#1C1E22] rounded-3xl p-6 sm:p-10 shadow-2xl border border-white/10">
           {/* Camera preview */}
           <div className="flex flex-col items-center">
-            <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-[var(--room-tile)] shadow-inner border border-white/10 flex items-center justify-center">
+            <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--room-tile)] shadow-inner border border-white/10 flex items-center justify-center">
               {videoEnabled && !mediaError ? (
                 <video
                   ref={videoRef}
@@ -160,7 +160,7 @@ export default function LobbyPage() {
                 />
               ) : (
                 <div
-                  className="flex h-24 w-24 items-center justify-center rounded-full text-white text-3xl font-bold shadow-lg"
+                  className="flex h-24 w-24 items-center justify-center rounded-3xl text-white text-3xl font-black shadow-lg"
                   style={{ background: 'var(--zoom-blue)' }}
                 >
                   {displayName.slice(0, 2).toUpperCase() || 'U'}
@@ -168,9 +168,9 @@ export default function LobbyPage() {
               )}
 
               {/* Status Overlay */}
-              <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-xs backdrop-blur-sm">
+              <div className="absolute bottom-3.5 left-3.5 flex items-center gap-2 rounded-full bg-black/70 px-3.5 py-1 text-xs font-semibold backdrop-blur-md">
                 <span>{displayName || 'Preview'}</span>
-                {!audioEnabled && <MicOff size={12} className="text-[var(--zoom-red)]" />}
+                {!audioEnabled && <MicOff size={13} className="text-[var(--zoom-red)]" />}
               </div>
             </div>
 
@@ -178,10 +178,10 @@ export default function LobbyPage() {
             <div className="mt-6 flex items-center gap-4">
               <button
                 onClick={toggleAudio}
-                className={`flex h-12 w-12 items-center justify-center rounded-full transition-all ${
+                className={`flex h-12 w-12 items-center justify-center rounded-full shadow-md active:scale-95 transition-all duration-200 ${
                   audioEnabled
-                    ? 'bg-white/10 hover:bg-white/20 text-white'
-                    : 'bg-[var(--zoom-red)] hover:bg-red-700 text-white shadow-lg'
+                    ? 'bg-white/15 hover:bg-white/25 text-white'
+                    : 'bg-[var(--zoom-red)] hover:bg-red-700 text-white shadow-red-900/30'
                 }`}
                 aria-label={audioEnabled ? 'Mute Microphone' : 'Unmute Microphone'}
               >
@@ -190,10 +190,10 @@ export default function LobbyPage() {
 
               <button
                 onClick={toggleVideo}
-                className={`flex h-12 w-12 items-center justify-center rounded-full transition-all ${
+                className={`flex h-12 w-12 items-center justify-center rounded-full shadow-md active:scale-95 transition-all duration-200 ${
                   videoEnabled
-                    ? 'bg-white/10 hover:bg-white/20 text-white'
-                    : 'bg-[var(--zoom-red)] hover:bg-red-700 text-white shadow-lg'
+                    ? 'bg-white/15 hover:bg-white/25 text-white'
+                    : 'bg-[var(--zoom-red)] hover:bg-red-700 text-white shadow-red-900/30'
                 }`}
                 aria-label={videoEnabled ? 'Stop Video' : 'Start Video'}
               >
@@ -202,40 +202,40 @@ export default function LobbyPage() {
             </div>
 
             {mediaError && (
-              <p className="mt-3 text-xs text-amber-400">
-                Camera/mic permission was blocked. You can join with avatar mode.
+              <p className="mt-3 text-xs text-amber-400 font-medium">
+                Camera/mic permission was blocked. You can join in audio/avatar mode.
               </p>
             )}
           </div>
 
           {/* Join details form */}
-          <div className="flex flex-col gap-4 border-t md:border-t-0 md:border-l border-white/10 pt-6 md:pt-0 md:pl-8">
+          <div className="flex flex-col gap-5 border-t md:border-t-0 md:border-l border-white/10 pt-6 md:pt-0 md:pl-8">
             <div>
-              <h2 className="text-xl font-bold text-white">Ready to join?</h2>
+              <h2 className="text-2xl font-black text-white tracking-tight">Ready to join?</h2>
               <p className="text-xs text-white/60 mt-1">
-                Enter your name to join the meeting room.
+                Configure your display name before entering the room
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-white/80 mb-1.5 uppercase tracking-wider">
-                  Your Name
+                <label className="block text-xs font-bold text-white/80 mb-1.5 uppercase tracking-wider">
+                  Your Display Name
                 </label>
                 <input
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-                  placeholder="Enter your name"
+                  placeholder="e.g. Anil Kumawat"
                   maxLength={60}
-                  className="w-full h-11 px-3.5 rounded-control bg-white/5 border border-white/20 text-white text-sm placeholder:text-white/30 focus:border-[var(--zoom-blue)] focus:outline-none transition-colors"
+                  className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/20 text-white text-sm placeholder:text-white/30 focus:border-[var(--zoom-blue)] focus:ring-2 focus:ring-[var(--zoom-blue)]/20 focus:outline-none transition-all"
                 />
               </div>
 
               {meetingInfo?.requires_passcode && (
                 <div>
-                  <label className="block text-xs font-semibold text-white/80 mb-1.5 uppercase tracking-wider">
+                  <label className="block text-xs font-bold text-white/80 mb-1.5 uppercase tracking-wider">
                     Meeting Passcode
                   </label>
                   <input
@@ -244,18 +244,18 @@ export default function LobbyPage() {
                     onChange={(e) => setPasscode(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
                     placeholder="Enter passcode"
-                    className="w-full h-11 px-3.5 rounded-control bg-white/5 border border-white/20 text-white text-sm font-mono placeholder:text-white/30 focus:border-[var(--zoom-blue)] focus:outline-none transition-colors"
+                    className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/20 text-white text-sm font-mono placeholder:text-white/30 focus:border-[var(--zoom-blue)] focus:ring-2 focus:ring-[var(--zoom-blue)]/20 focus:outline-none transition-all"
                   />
                 </div>
               )}
 
               {!user && (
-                <label className="flex items-center gap-2 text-xs text-white/70 cursor-pointer pt-1">
+                <label className="flex items-center gap-2.5 text-xs text-white/70 cursor-pointer pt-1">
                   <input
                     type="checkbox"
                     checked={rememberName}
                     onChange={(e) => setRememberName(e.target.checked)}
-                    className="rounded border-white/30 text-[var(--zoom-blue)] focus:ring-0"
+                    className="rounded-md border-white/30 text-[var(--zoom-blue)] focus:ring-0 accent-[var(--zoom-blue)]"
                   />
                   Remember my name for future meetings
                 </label>
@@ -265,14 +265,14 @@ export default function LobbyPage() {
             <button
               onClick={handleJoin}
               disabled={!displayName.trim() || loading}
-              className="mt-2 w-full h-11 rounded-control font-semibold text-sm transition-all duration-150 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-2 w-full h-12 rounded-full font-bold text-sm shadow-md hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ background: 'var(--zoom-blue)', color: 'white' }}
             >
-              {loading ? 'Connecting...' : 'Join Meeting'}
+              {loading ? 'Connecting to Room...' : 'Join Meeting'}
             </button>
 
-            <p className="text-[11px] leading-tight text-white/40 text-center">
-              By clicking Join, you agree to our Terms of Service and Privacy Statement.
+            <p className="text-[11px] leading-relaxed text-white/40 text-center">
+              By clicking Join, you agree to our Terms of Service & Privacy Policy.
             </p>
           </div>
         </div>

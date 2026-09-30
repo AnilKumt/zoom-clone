@@ -7,6 +7,7 @@ import { apiClient } from '@/lib/api-client';
 import { isValidMeetingInput, parseMeetingCode } from '@/lib/meeting-code';
 import { ChatFab } from '@/components/layout/ChatFab';
 import { ROUTES } from '@/constants/routes';
+import { Video, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export default function JoinPage() {
   const router = useRouter();
@@ -20,7 +21,7 @@ export default function JoinPage() {
 
   const triggerShake = () => {
     setShaking(true);
-    setTimeout(() => setShaking(false), 200);
+    setTimeout(() => setShaking(false), 250);
   };
 
   const handleJoin = async () => {
@@ -38,12 +39,11 @@ export default function JoinPage() {
 
       const code = parsed.type === 'numeric' ? parsed.code : parsed.name;
 
-      // Validate meeting exists before navigating to lobby
       const info = await apiClient.get<{ exists: boolean; status: string }>(
         `/meetings/${code}/public`
       );
       if (!info.exists || info.status === 'ended' || info.status === 'cancelled') {
-        setError('Invalid meeting ID. Check and try again.');
+        setError('Meeting not found or already ended.');
         triggerShake();
         return;
       }
@@ -58,36 +58,46 @@ export default function JoinPage() {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col" style={{ background: 'white' }}>
-      {/* Slim nav */}
+    <div className="flex min-h-dvh flex-col" style={{ background: 'var(--page-bg)' }}>
+      {/* Top navigation */}
       <header
-        className="flex h-14 items-center justify-between px-6 border-b"
+        className="flex h-16 items-center justify-between px-6 bg-white/90 backdrop-blur-md border-b"
         style={{ borderColor: 'var(--border)' }}
       >
-        <Link href={ROUTES.HOME} className="text-2xl font-black" style={{ color: 'var(--zoom-blue)' }}>
+        <Link href={ROUTES.HOME} className="text-2xl font-black tracking-tight" style={{ color: 'var(--zoom-blue)' }}>
           zoom
         </Link>
-        <div className="flex items-center gap-4">
-          <Link href="#" className="text-sm" style={{ color: 'var(--text-primary)' }}>Support</Link>
-          <Link href={ROUTES.SCHEDULE} className="text-sm" style={{ color: 'var(--text-primary)' }}>Schedule</Link>
-          <Link href={ROUTES.JOIN} className="text-sm font-medium" style={{ color: 'var(--zoom-blue)' }}>Join</Link>
-          <Link href={ROUTES.HOME} className="text-sm" style={{ color: 'var(--text-primary)' }}>Host</Link>
+        <div className="flex items-center gap-2">
+          <Link href={ROUTES.SCHEDULE} className="text-xs font-bold px-4 py-2 rounded-full hover:bg-[var(--surface-tonal)] transition-colors" style={{ color: 'var(--text-primary)' }}>
+            Schedule
+          </Link>
+          <Link href={ROUTES.JOIN} className="text-xs font-bold px-4 py-2 rounded-full bg-[var(--zoom-blue-tint)]" style={{ color: 'var(--zoom-blue)' }}>
+            Join
+          </Link>
+          <Link href={ROUTES.HOME} className="text-xs font-bold px-4 py-2 rounded-full hover:bg-[var(--surface-tonal)] transition-colors" style={{ color: 'var(--text-primary)' }}>
+            Host
+          </Link>
         </div>
       </header>
 
-      {/* Centered form */}
-      <main className="flex flex-1 items-center justify-center px-4">
-        <div className="w-full max-w-[450px]">
-          <h1 className="text-[32px] font-bold mb-6" style={{ color: 'var(--text-primary)' }}>
-            Join Meeting
-          </h1>
+      {/* Centered join card */}
+      <main className="flex flex-1 items-center justify-center px-4 py-12 relative">
+        <div className="card p-8 md:p-10 w-full max-w-[460px] shadow-[var(--shadow-card-hover)] border border-slate-100">
+          <div className="mb-6">
+            <h1 className="text-2xl md:text-3xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
+              Join Meeting
+            </h1>
+            <p className="text-xs font-medium text-[var(--text-secondary)] mt-1">
+              Enter your Meeting ID or Personal Link to connect
+            </p>
+          </div>
 
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div>
               <label
                 htmlFor={inputId}
-                className="block text-sm font-medium mb-1.5"
-                style={{ color: 'var(--text-primary)' }}
+                className="block text-xs font-bold uppercase tracking-wider mb-2"
+                style={{ color: 'var(--text-secondary)' }}
               >
                 Meeting ID or Personal Link Name
               </label>
@@ -97,25 +107,22 @@ export default function JoinPage() {
                 value={value}
                 onChange={(e) => { setValue(e.target.value); setError(null); }}
                 onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-                placeholder="Enter Meeting ID or Personal Link Name"
+                placeholder="e.g. 833 834 7512"
                 className={[
-                  'w-full h-12 px-4 rounded-control border text-base outline-none transition-all',
+                  'w-full h-12 px-4 rounded-xl border text-base font-medium outline-none transition-all duration-200 bg-white',
                   shaking ? 'animate-shake' : '',
                   error
-                    ? 'border-red-500'
+                    ? 'border-red-500 ring-2 ring-red-100'
                     : isValid
-                    ? 'border-[var(--zoom-blue)]'
-                    : 'border-[var(--border)]',
+                    ? 'border-[var(--zoom-blue)] ring-2 ring-blue-100'
+                    : 'border-slate-200 focus:border-[var(--zoom-blue)] focus:ring-2 focus:ring-blue-100',
                 ].join(' ')}
-                style={{
-                  boxShadow: isValid ? '0 0 0 1px var(--zoom-blue)' : undefined,
-                }}
                 aria-describedby={error ? 'join-error' : undefined}
                 aria-invalid={!!error}
                 autoComplete="off"
               />
               {error && (
-                <p id="join-error" className="mt-1.5 text-sm text-red-600" role="alert">
+                <p id="join-error" className="mt-2 text-xs font-bold text-red-600" role="alert">
                   {error}
                 </p>
               )}
@@ -124,20 +131,20 @@ export default function JoinPage() {
             <button
               onClick={handleJoin}
               disabled={!isValid || loading}
-              className="w-full h-12 rounded-control text-base font-semibold transition-colors"
+              className="w-full h-12 rounded-full text-sm font-bold shadow-sm hover:shadow-md active:scale-95 transition-all duration-200"
               style={{
-                background: isValid ? 'var(--zoom-blue)' : '#EEEEF2',
-                color: isValid ? 'white' : '#8D8D8D',
+                background: isValid ? 'var(--zoom-blue)' : '#E8EAED',
+                color: isValid ? 'white' : '#8D929A',
                 cursor: isValid && !loading ? 'pointer' : 'not-allowed',
               }}
             >
-              {loading ? 'Checking...' : 'Join'}
+              {loading ? 'Validating Meeting...' : 'Join Meeting'}
             </button>
           </div>
 
-          <div className="mt-24">
-            <button className="text-sm" style={{ color: 'var(--zoom-blue)' }}>
-              Join a meeting from an H.323/SIP room system
+          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+            <button className="text-xs font-semibold text-[var(--zoom-blue)] hover:underline">
+              Join from an H.323/SIP room system
             </button>
           </div>
         </div>
@@ -145,13 +152,13 @@ export default function JoinPage() {
 
       {/* Footer */}
       <footer
-        className="py-4 px-6 flex items-center justify-between text-xs"
-        style={{ color: 'var(--text-secondary)' }}
+        className="py-4 px-6 flex items-center justify-between text-xs font-medium border-t border-slate-100 bg-white"
+        style={{ color: 'var(--text-tertiary)' }}
       >
         <span>
-          &copy; 2026 Zoom Communications, Inc. All rights reserved. Privacy &amp; Legal Policies
+          &copy; 2026 Zoom Video Communications Clone
         </span>
-        <button className="border rounded px-2 py-1" style={{ borderColor: 'var(--border)' }}>
+        <button className="border border-slate-200 rounded-full px-3 py-1 bg-white hover:bg-slate-50 transition-colors">
           English ▾
         </button>
       </footer>

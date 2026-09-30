@@ -3,35 +3,41 @@
 
 @layer base {
   :root {
-    /* Zoom design tokens */
+    /* Zoom signature design tokens */
     --zoom-blue: #0B5CFF;
     --zoom-blue-hover: #0847C7;
     --zoom-blue-tint: #EEF3FF;
+    --zoom-blue-subtle: #E3EDFF;
     --zoom-orange: #F26D21;
+    --zoom-orange-hover: #D95811;
     --zoom-red: #E02828;
     --zoom-green: #2EA76A;
 
     /* Text */
-    --text-primary: #232333;
-    --text-secondary: #6E7680;
+    --text-primary: #1C1E21;
+    --text-secondary: #5F6368;
+    --text-tertiary: #80868B;
 
-    /* Layout */
-    --border: #E8E8EF;
-    --page-bg: #F7F7FA;
+    /* Material Design 3 Layout & Surface Hierarchy */
+    --border: #E8EAED;
+    --surface-border: #E0E2E7;
+    --page-bg: #F8FAFD;
     --card-bg: #FFFFFF;
+    --surface-tonal: #F0F4F9;
 
-    /* Room */
-    --room-bg: #1A1A1A;
-    --room-toolbar: #1C1C1C;
-    --room-tile: #2B2B2B;
+    /* Room Environment */
+    --room-bg: #121316;
+    --room-toolbar: #1C1E22;
+    --room-tile: #24272C;
 
-    /* Shape */
-    --radius-card: 12px;
-    --radius-control: 8px;
+    /* MD3 Shape Hierarchy */
+    --radius-card: 20px;
+    --radius-control: 12px;
     --radius-pill: 9999px;
 
-    /* Shadows */
-    --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.08);
+    /* MD3 Elevation Shadows */
+    --shadow-card: 0 1px 3px 1px rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    --shadow-card-hover: 0 4px 14px 2px rgba(0, 0, 0, 0.08), 0 2px 4px 0 rgba(0, 0, 0, 0.04);
   }
 
   * {
@@ -41,11 +47,13 @@
   html {
     font-family: var(--font-lato), system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   body {
     color: var(--text-primary);
     background: var(--page-bg);
+    letter-spacing: -0.01em;
   }
 
   /* Keyboard-only focus ring — visible for keyboard users, hidden for mouse */
@@ -71,44 +79,63 @@
 }
 
 @layer components {
-  .btn-primary {
-    @apply bg-[var(--zoom-blue)] text-white rounded-control px-4 py-2
-      hover:bg-[var(--zoom-blue-hover)] transition-colors duration-150
+  /* MD3 Buttons styled with Zoom branding */
+  .btn-primary, .btn-filled {
+    @apply bg-[var(--zoom-blue)] text-white rounded-full px-5 py-2.5 font-semibold text-sm
+      shadow-sm hover:shadow-md hover:bg-[var(--zoom-blue-hover)]
+      active:scale-[0.97] transition-all duration-200 ease-out
+      focus-visible:outline-[var(--zoom-blue)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  .btn-tonal {
+    @apply bg-[var(--zoom-blue-tint)] text-[var(--zoom-blue)] rounded-full px-5 py-2.5 font-semibold text-sm
+      hover:bg-[var(--zoom-blue-subtle)] hover:shadow-sm
+      active:scale-[0.97] transition-all duration-200 ease-out
       focus-visible:outline-[var(--zoom-blue)] disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
-  .btn-outline {
-    @apply border border-[var(--zoom-blue)] text-[var(--zoom-blue)] rounded-control px-4 py-2
-      hover:bg-[var(--zoom-blue-tint)] transition-colors duration-150;
+  .btn-outline, .btn-outlined {
+    @apply border border-[var(--surface-border)] text-[var(--text-primary)] rounded-full px-5 py-2.5 font-medium text-sm
+      hover:border-[var(--zoom-blue)] hover:text-[var(--zoom-blue)] hover:bg-[var(--zoom-blue-tint)]/40
+      active:scale-[0.97] transition-all duration-200 ease-out;
   }
 
-  .card {
-    @apply bg-[var(--card-bg)] rounded-card shadow-card;
+  .btn-icon {
+    @apply flex items-center justify-center rounded-full p-2.5 text-[var(--text-secondary)]
+      hover:bg-black/5 active:scale-90 active:bg-black/10 transition-all duration-150;
+  }
+
+  /* MD3 Surface Cards */
+  .card, .card-md3 {
+    @apply bg-[var(--card-bg)] rounded-[var(--radius-card)] border border-[var(--border)]
+      shadow-[var(--shadow-card)] transition-all duration-300;
+  }
+
+  .card-interactive {
+    @apply card hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-0.5 transition-all duration-300;
+  }
+
+  /* MD3 State Layer Ripple Simulation */
+  .state-layer {
+    @apply relative overflow-hidden before:absolute before:inset-0 before:bg-current before:opacity-0 hover:before:opacity-5 active:before:opacity-10 before:transition-opacity;
   }
 
   /* Shake animation for validation errors */
   .animate-shake {
-    animation: shake 0.2s ease-out;
+    animation: shake 0.25s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
   }
 
   @keyframes shake {
-    0%,
-    100% {
-      transform: translateX(0);
-    }
-    25% {
-      transform: translateX(-4px);
-    }
-    75% {
-      transform: translateX(4px);
-    }
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-6px); }
+    40%, 80% { transform: translateX(6px); }
   }
 
   /* Floating emoji reaction animation */
   @keyframes floatUp {
     0% {
       opacity: 0;
-      transform: translateY(20px) scale(0.8);
+      transform: translateY(20px) scale(0.7);
     }
     15% {
       opacity: 1;
@@ -125,6 +152,22 @@
   }
 
   .animate-float-up {
-    animation: floatUp 3s ease-out forwards;
+    animation: floatUp 3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  }
+
+  /* Scale in for dialogs / dropdowns */
+  @keyframes scaleIn {
+    0% {
+      opacity: 0;
+      transform: scale(0.94) translateY(-4px);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 }
