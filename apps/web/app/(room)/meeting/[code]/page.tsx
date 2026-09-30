@@ -57,10 +57,15 @@ export default function MeetingRoomPage() {
   const [showInfoPopover, setShowInfoPopover] = useState(false);
   const [showEndMenu, setShowEndMenu] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
+  const [showSecurityMenu, setShowSecurityMenu] = useState(false);
   const [chatMessages, setChatMessages] = useState<
     Array<{ id: string; sender: string; text: string; time: string }>
   >([]);
   const [chatInput, setChatInput] = useState('');
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [reactions, setReactions] = useState<
+    Array<{ id: string; emoji: string; sender: string; participantId?: string }>
+  >([]);
 
   const socketClientRef = useRef<RoomSocketClient | null>(null);
   const peerManagerRef = useRef<RoomPeerManager | null>(null);
@@ -71,8 +76,16 @@ export default function MeetingRoomPage() {
 
   const participantList = useMemo(() => Object.values(participants), [participants]);
   const self = selfId ? participants[selfId] : null;
-  const isHost = self?.role === 'host';
-  const isCoHost = self?.role === 'co_host';
+  const isHost = self?.role === 'host' || joinResult?.role === 'host';
+  const isCoHost = self?.role === 'co_host' || joinResult?.role === 'co_host';
+
+  const triggerReaction = (emoji: string, sender: string, participantId?: string) => {
+    const id = crypto.randomUUID();
+    setReactions((prev) => [...prev, { id, emoji, sender, participantId }]);
+    setTimeout(() => {
+      setReactions((prev) => prev.filter((r) => r.id !== id));
+    }, 3500);
+  };
 
   // Measure container for computeGrid
   useEffect(() => {
@@ -135,6 +148,25 @@ export default function MeetingRoomPage() {
       (message) => {
         if (message.type === 'rtc.offer' || message.type === 'rtc.answer' || message.type === 'rtc.ice') {
           void peerManagerRef.current?.handleSignal(message.payload as { from_id: string; target_id?: string; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit });
+        } else if (message.type === 'chat.message') {
+          const msg = message.payload as { id?: string; sender?: string; text?: string; time?: string };
+          if (msg.text) {
+            setChatMessages((prev) => [
+              ...prev,
+              {
+                id: msg.id || crypto.randomUUID(),
+                sender: msg.sender || 'Participant',
+                text: msg.text || '',
+                time: msg.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              },
+            ]);
+            setUnreadChatCount((prev) => prev + 1);
+          }
+        } else if (message.type === 'reaction.received') {
+          const payload = message.payload as { emoji: string; sender: string; participant_id: string };
+          if (payload?.emoji) {
+            triggerReaction(payload.emoji, payload.sender || 'Participant', payload.participant_id);
+          }
         }
       }
     );
@@ -305,19 +337,30 @@ export default function MeetingRoomPage() {
     e.preventDefault();
     if (!chatInput.trim() || !self) return;
 
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const msgId = crypto.randomUUID();
     const newMsg = {
-      id: crypto.randomUUID(),
+      id: msgId,
       sender: self.display_name,
       text: chatInput.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: timeStr,
     };
 
     setChatMessages((prev) => [...prev, newMsg]);
     socketClientRef.current?.send('chat.message', {
+      id: msgId,
       text: chatInput.trim(),
       sender_name: self.display_name,
+      time: timeStr,
     });
     setChatInput('');
+  };
+
+  const handleSendReaction = (emoji: string) => {
+    if (!self) return;
+    socketClientRef.current?.send('reaction.send', { emoji });
+    triggerReaction(emoji, self.display_name, self.id);
+    setShowReactions(false);
   };
 
   const gridLayout = useMemo(() => {
@@ -434,6 +477,20 @@ export default function MeetingRoomPage() {
         ))}
       </div>
 
+      {/* Floating Reactions Overlay (Zero white background, dark theme floating animation) */}
+      <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
+        {reactions.map((r, idx) => (
+          <div
+            key={r.id}
+            className="animate-float-up absolute bottom-24 flex items-center gap-2 rounded-full bg-[#181818]/90 backdrop-blur-md px-4 py-2 border border-white/20 shadow-2xl"
+            style={{ left: `${15 + (idx % 6) * 14}%` }}
+          >
+            <span className="text-3xl leading-none">{r.emoji}</span>
+            <span className="text-xs font-bold text-white/90">{r.sender}</span>
+          </div>
+        ))}
+      </div>
+
       {/* STAGE (Dynamic Video Grid + Docked Side Panel) */}
       <main className="flex flex-1 overflow-hidden relative">
         <div
@@ -454,11 +511,12 @@ export default function MeetingRoomPage() {
               const hasVideo = isSelf ? self?.video : p.video;
               const hasAudio = isSelf ? self?.audio : p.audio;
               const isSpeaking = p.id === activeSpeakerId;
+              const activeTileReaction = reactions.find((r) => r.participantId === p.id);
 
               return (
                 <div
                   key={p.id}
-                  className={`relative rounded-xl overflow-hidden bg-[var(--room-tile)] flex items-center justify-center border-2 transition-all shadow-md ${
+                  className={`group relative rounded-xl overflow-hidden bg-[var(--room-tile)] flex items-center justify-center border-2 transition-all shadow-md ${
                     isSpeaking ? 'border-[var(--zoom-green)]' : 'border-transparent'
                   }`}
                   style={{ width: `${gridLayout.tileWidth}px`, height: `${gridLayout.tileHeight}px` }}
@@ -505,11 +563,40 @@ export default function MeetingRoomPage() {
                     </div>
                   )}
 
+                  {/* Top-Left: Active Reaction badge */}
+                  {activeTileReaction && (
+                    <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 rounded-full bg-black/80 px-2.5 py-1 text-sm shadow-2xl backdrop-blur-md border border-white/20 animate-in zoom-in-50 duration-200">
+                      <span className="text-xl">{activeTileReaction.emoji}</span>
+                    </div>
+                  )}
+
                   {/* Top-Right: Raised Hand badge */}
                   {p.hand_raised && (
-                    <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-black shadow-md animate-bounce">
+                    <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-black shadow-md animate-bounce z-10">
                       <Hand size={12} />
                       <span>Hand Raised</span>
+                    </div>
+                  )}
+
+                  {/* Top-Right: Quick Host Tile Controls */}
+                  {(isHost || isCoHost) && !isSelf && (
+                    <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 shadow-xl">
+                      {p.audio && (
+                        <button
+                          onClick={() => handleMuteParticipant(p.id)}
+                          className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/20 hover:bg-white/30 text-white transition-colors"
+                          title="Mute participant"
+                        >
+                          Mute
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleRemoveParticipant(p.id)}
+                        className="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-600/80 hover:bg-red-600 text-white transition-colors"
+                        title="Remove participant"
+                      >
+                        Remove
+                      </button>
                     </div>
                   )}
 
@@ -564,6 +651,17 @@ export default function MeetingRoomPage() {
             {/* Participants list tab */}
             {panel === 'participants' && (
               <div className="flex flex-1 flex-col overflow-hidden">
+                {(isHost || isCoHost) && (
+                  <div className="p-2 border-b border-white/10 bg-[#181818] flex items-center justify-between">
+                    <span className="text-xs font-semibold text-white/70">Host Actions</span>
+                    <button
+                      onClick={handleMuteAll}
+                      className="px-3 py-1 rounded bg-[var(--zoom-blue)] hover:bg-[var(--zoom-blue-hover)] text-xs font-semibold text-white transition-colors"
+                    >
+                      Mute All
+                    </button>
+                  </div>
+                )}
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
                   {participantList.map((p) => {
                     const isSelf = p.id === selfId;
@@ -609,7 +707,7 @@ export default function MeetingRoomPage() {
                               {canMute && p.audio && (
                                 <button
                                   onClick={() => handleMuteParticipant(p.id)}
-                                  className="px-2 py-0.5 rounded text-[11px] bg-white/10 hover:bg-white/20 text-white"
+                                  className="px-2 py-0.5 rounded text-[11px] bg-white/10 hover:bg-white/20 text-white font-medium"
                                 >
                                   Mute
                                 </button>
@@ -617,7 +715,7 @@ export default function MeetingRoomPage() {
                               {canRemove && (
                                 <button
                                   onClick={() => handleRemoveParticipant(p.id)}
-                                  className="px-2 py-0.5 rounded text-[11px] bg-red-600/80 hover:bg-red-600 text-white"
+                                  className="px-2 py-0.5 rounded text-[11px] bg-red-600/80 hover:bg-red-600 text-white font-medium"
                                 >
                                   Remove
                                 </button>
@@ -635,9 +733,9 @@ export default function MeetingRoomPage() {
                   <div className="border-t border-white/10 p-3 bg-[#181818]">
                     <button
                       onClick={handleMuteAll}
-                      className="w-full h-8 rounded-control bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-colors"
+                      className="w-full h-8 rounded-control bg-[var(--zoom-blue)] hover:bg-[var(--zoom-blue-hover)] text-xs font-semibold text-white transition-colors"
                     >
-                      Mute All
+                      Mute All Participants
                     </button>
                   </div>
                 )}
@@ -674,7 +772,7 @@ export default function MeetingRoomPage() {
                     type="text"
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Type message here..."
+                    placeholder="Type message to everyone..."
                     maxLength={2000}
                     className="w-full h-9 rounded-control bg-white/10 border border-white/20 px-3 text-xs text-white placeholder:text-white/40 focus:outline-none focus:border-[var(--zoom-blue)]"
                   />
@@ -707,8 +805,47 @@ export default function MeetingRoomPage() {
           />
         </div>
 
-        {/* Center cluster: Participants, Chat, Share, Reactions */}
+        {/* Center cluster: Security (Host), Participants, Chat, Share, Reactions */}
         <div className="flex items-center gap-1 sm:gap-2">
+          {(isHost || isCoHost) && (
+            <div className="relative">
+              <ToolbarButton
+                icon={<Shield size={20} className="text-[var(--zoom-green)]" />}
+                label="Security"
+                onClick={() => setShowSecurityMenu(!showSecurityMenu)}
+                active={showSecurityMenu}
+              />
+              {showSecurityMenu && (
+                <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 w-52 rounded-card bg-[#242424] p-2 shadow-2xl border border-white/10 text-xs">
+                  <div className="px-2 py-1 text-[10px] font-bold text-white/50 uppercase tracking-wider border-b border-white/10 mb-1">
+                    Host Controls
+                  </div>
+                  <button
+                    onClick={() => {
+                      handleMuteAll();
+                      setShowSecurityMenu(false);
+                    }}
+                    className="flex items-center gap-2 w-full rounded px-2.5 py-2 text-left font-medium text-white hover:bg-white/10 transition-colors"
+                  >
+                    <MicOff size={14} className="text-[var(--zoom-red)]" />
+                    <span>Mute All</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      socketClientRef.current?.send('host.mute_all', { allow_self_unmute: false });
+                      toast.success('Muted all and locked unmute');
+                      setShowSecurityMenu(false);
+                    }}
+                    className="flex items-center gap-2 w-full rounded px-2.5 py-2 text-left font-medium text-white hover:bg-white/10 transition-colors"
+                  >
+                    <Shield size={14} className="text-amber-400" />
+                    <span>Lock Unmute</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <ToolbarButton
             icon={<Users size={20} />}
             label="Participants"
@@ -719,7 +856,11 @@ export default function MeetingRoomPage() {
           <ToolbarButton
             icon={<MessageSquare size={20} />}
             label="Chat"
-            onClick={() => setPanel(panel === 'chat' ? 'none' : 'chat')}
+            onClick={() => {
+              if (panel !== 'chat') setUnreadChatCount(0);
+              setPanel(panel === 'chat' ? 'none' : 'chat');
+            }}
+            badge={unreadChatCount}
             active={panel === 'chat'}
           />
           <ToolbarButton
@@ -736,16 +877,13 @@ export default function MeetingRoomPage() {
             />
 
             {showReactions && (
-              <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 rounded-2xl bg-[#242424] p-3 shadow-2xl border border-white/10">
-                <div className="flex items-center gap-2 text-xl">
-                  {['👍', '👏', '❤️', '😂', '🎉', '😮'].map((emoji) => (
+              <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 rounded-2xl bg-[#242424]/95 backdrop-blur-md p-3 shadow-2xl border border-white/15 text-white">
+                <div className="flex items-center gap-2 text-2xl p-1">
+                  {['👍', '👏', '❤️', '😂', '🎉', '😮', '🔥', '🙌'].map((emoji) => (
                     <button
                       key={emoji}
-                      onClick={() => {
-                        toast(emoji);
-                        setShowReactions(false);
-                      }}
-                      className="hover:scale-125 transition-transform p-1 rounded"
+                      onClick={() => handleSendReaction(emoji)}
+                      className="hover:scale-125 transition-transform p-1.5 rounded-lg hover:bg-white/10"
                     >
                       {emoji}
                     </button>

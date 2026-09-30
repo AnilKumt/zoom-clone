@@ -103,4 +103,28 @@
       transform: translateX(4px);
     }
   }
+
+  /* Floating emoji reaction animation */
+  @keyframes floatUp {
+    0% {
+      opacity: 0;
+      transform: translateY(20px) scale(0.8);
+    }
+    15% {
+      opacity: 1;
+      transform: translateY(0px) scale(1.15);
+    }
+    80% {
+      opacity: 1;
+      transform: translateY(-40px) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-70px) scale(0.9);
+    }
+  }
+
+  .animate-float-up {
+    animation: floatUp 3s ease-out forwards;
+  }
 }
