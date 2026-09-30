@@ -1,236 +1,229 @@
-# zoom — Zoom Web-App Clone
+# Zoom Clone
 
-> A faithful, full-stack Zoom web-app clone built as a take-home SDE-2 exercise. The UI is pixel-matched to Zoom's portal, and the backend demonstrates senior-level system design: layered architecture, Redis, real-time WebSockets, OTP auth, and host controls enforced on the server.
+A full-stack Zoom web application clone built with Next.js, FastAPI, SQLite, and WebSockets. The application replicates Zoom's portal design, core meeting workflows, and real-time collaboration features.
 
----
+## Live Demo
 
-## Screenshots
-
-> _Screenshots go here — run the app and capture `/home`, `/join`, `/welcome`, and the meeting room._
-
----
+- **Frontend Application**: https://zoom-2.netlify.app
+- **Backend API & WebSockets**: https://zoom-clone-pr52.onrender.com
+- **Swagger API Documentation**: https://zoom-clone-pr52.onrender.com/docs
 
 ## Tech Stack
 
-| Layer | Technology | Why |
+- **Frontend**: Next.js 14+ (App Router, TypeScript, SPA mode)
+- **Backend**: Python 3.12, FastAPI (async), Uvicorn
+- **Database**: SQLite with Write-Ahead Logging (WAL) mode, SQLAlchemy 2.0 (async), Alembic
+- **Real-Time & Ephemeral State**: Redis (Upstash) for WebSockets, single-use tickets, and room presence
+- **Video & Audio**: WebRTC peer-to-peer mesh
+- **UI & Styling**: Tailwind CSS, Radix UI primitives, Lucide React, Sonner
+- **State Management & Data Fetching**: TanStack Query (React Query), Zustand
+- **Form Handling & Validation**: React Hook Form, Zod
+
+## Features
+
+### Core Features
+- **Landing Dashboard (`/home`)**: Zoom-style navigation bar, sidebar navigation, user profile card with Personal Meeting ID (PMI), quick action tiles, upcoming meetings list, and previous meetings list.
+- **Instant Meeting Creation**: Generates a collision-resistant 10-digit numeric meeting ID, creates shareable `/j/{code}` invite links, and routes the host through the pre-meeting lobby into the room.
+- **Join Meeting**: Allows joining by meeting ID (raw digits, spaced, or dashed) or direct invite URL, includes pre-join display name prompt, and validates meeting existence and passcode requirements.
+- **Schedule Meetings**: Form supporting topic, description, date/time pickers, duration, timezone selection, optional passcode, and camera/mic entry defaults. Stored in SQLite and immediately rendered in upcoming lists.
+- **Pre-Meeting Lobby (`/meeting/{code}/lobby`)**: Camera video preview, microphone toggle, name entry, passcode validation, and media permission error fallback.
+
+### Bonus Features
+- **Responsive Design**: Adapts layout across desktop, tablet, and mobile screen sizes.
+- **User Authentication & Demo Mode**: Pre-configured with a default seeded user (`Anil Kumawat`) for evaluator access; supports optional Email OTP authentication with JWT httpOnly cookie rotation.
+- **Real-Time Video & Audio**: WebRTC mesh peer connection supporting camera and microphone communication with independent background audio playback that persists when video is turned off.
+- **In-Meeting Chat**: Real-time broadcast messaging across all connected participants with sender names and timestamps.
+- **In-Meeting Reactions**: Animated floating emoji reactions broadcast to all room participants and displayed as on-tile badges.
+- **Host Controls**: Server-enforced role verification for muting participants, removing participants with connection termination, and ending meetings for all attendees.
+
+## Database Schema
+
+The database uses SQLite in WAL (Write-Ahead Logging) mode to allow concurrent readers without blocking writes.
+
+### Entity Relationship & Tables
+
+```
++--------------------+           +----------------------+
+|       users        | 1       * |       meetings       |
++--------------------+-----------+----------------------+
+| id (PK, ULID)      |           | id (PK, ULID)        |
+| email (Unique)     |           | meeting_code (Unique)|
+| name               |           | host_id (FK -> users)|
+| password_hash      |           | title                |
+| personal_meeting_id|           | description          |
+| timezone           |           | kind                 |
+| plan               |           | status               |
+| is_demo            |           | scheduled_start_at   |
+| is_active          |           | duration_minutes     |
+| created_at         |           | timezone             |
+| updated_at         |           | passcode             |
++--------------------+           | started_at, ended_at |
+                                 +----------------------+
+                                            | 1
+                                            |
+                                            | 1
+                                 +----------------------+
+                                 |   meeting_settings   |
+                                 +----------------------+
+                                 | meeting_id (PK, FK)  |
+                                 | host_video_on        |
+                                 | participant_video_on |
+                                 | mute_on_entry        |
+                                 | join_before_host     |
+                                 | waiting_room         |
+                                 | allow_self_unmute    |
+                                 | chat_enabled         |
+                                 +----------------------+
+
++----------------------+
+|     participants     |
++----------------------+
+| id (PK, ULID)        |
+| meeting_id (FK)      |
+| user_id (FK, Nullable|
+| guest_key            |
+| display_name         |
+| role                 |
+| status               |
+| joined_at            |
+| left_at              |
+| removed_by (FK)      |
++----------------------+
+```
+
+### Key Design Decisions
+- **1:1 Settings Separation**: Extracted `meeting_settings` from `meetings` to maintain a narrow, performant table for high-frequency list queries while adhering to Single Responsibility Principle.
+- **Immutable Attendance Records**: Every join action generates a new `participants` record, preserving complete historical attendance even across rejoins.
+- **ULID Primary Keys**: High-performance, lexically sortable identifiers prevent predictable sequential ID enumeration.
+- **Database Constraints & Indexes**: Enforces check constraints on statuses and emails, alongside composite indexes on `(host_id, status, scheduled_start_at)` to optimize upcoming meeting queries.
+- **Redis for Ephemeral State**: High-frequency, short-lived data (30-second single-use WebSocket tickets, room presence hashes, rate limits) are managed in Redis to prevent SQLite write-lock contention.
+
+## API Endpoints
+
+### Authentication & Users
+| Method | Path | Purpose |
 |---|---|---|
-| Frontend | Next.js 14+ (App Router, TypeScript) | SPA with SSR capability; file-based routing |
-| Styling | Tailwind CSS + CSS custom properties | Design tokens prevent hex hard-coding |
-| UI Components | shadcn/ui + Radix UI primitives | Accessible, unstyled base |
-| State (server) | TanStack Query | Stale-while-revalidate, cache invalidation |
-| State (room) | Zustand | Minimal, predictable ephemeral state |
-| Forms | react-hook-form + zod | Type-safe validation mirrored from backend |
-| Backend | FastAPI (async, Python 3.12) | Fast, auto-documented, strict typing |
-| ORM | SQLAlchemy 2.0 async | Repository pattern; swap DB without rewriting |
-| DB | SQLite (WAL mode) | Required; Postgres is a `DATABASE_URL` change |
-| Migrations | Alembic | Reproducible schema evolution |
-| Cache / RT | Redis (+ MemoryStore fallback) | TTLs, counters, pub/sub — wrong tool for SQLite |
-| Auth | JWT (httpOnly cookies) + Email OTP | XSS-safe; OTP prevents password-only attacks |
-| Real-time | WebSocket (FastAPI) | Presence, host controls, chat |
-| Testing | pytest, Vitest, Playwright | Layered coverage |
-| CI | GitHub Actions | Lint → type-check → test → build |
+| GET | `/api/v1/users/me` | Fetch currently authenticated user profile |
+| POST | `/api/v1/auth/register/request-otp` | Initiate email registration by sending an OTP |
+| POST | `/api/v1/auth/register/verify-otp` | Verify OTP and create user account |
+| POST | `/api/v1/auth/login` | Authenticate with email/password and set JWT cookies |
+| POST | `/api/v1/auth/refresh` | Rotate access and refresh tokens |
+| POST | `/api/v1/auth/logout` | Revoke session and clear cookies |
+| POST | `/api/v1/auth/password/forgot` | Request password reset link |
 
----
+### Meetings
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/v1/meetings/instant` | Create and immediately start an instant meeting |
+| POST | `/api/v1/meetings` | Schedule a meeting with custom settings |
+| GET | `/api/v1/meetings` | List upcoming or previous meetings for the authenticated user |
+| GET | `/api/v1/meetings/{code}` | Get detailed meeting information (Host view) |
+| GET | `/api/v1/meetings/{code}/public` | Get public meeting status and passcode requirements (Join page view) |
+| POST | `/api/v1/meetings/{code}/join` | Validate meeting joinability, record attendance, and mint a 30s WebSocket ticket |
 
-## Quick Start
+### Real-Time WebSockets
+| Protocol | Path | Purpose |
+|---|---|---|
+| WS | `/api/v1/ws/rooms/{code}?ticket={ticket}` | Bidirectional room communication: presence, signaling, host commands, and chat |
 
-### Option A: Docker (recommended)
+## Local Setup
 
-```bash
-# 1. Copy env files
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env.local
+### Prerequisites
+- Node.js 20+ and npm
+- Python 3.12+
+- Redis (Optional; an in-memory fallback store is included for local development)
 
-# 2. Start everything
-docker-compose up
-
-# 3. Open http://localhost:3000
-```
-
-### Option B: Local development
-
-**Prerequisites:** Node 22+, Python 3.12+, Redis (optional — MemoryStore used as fallback)
+### Backend
 
 ```bash
-# Backend
+# 1. Navigate to backend directory
 cd apps/api
-pip install -e ".[dev]"
-python -m app.seed          # seed database
-uvicorn app.main:app --reload --port 8000
 
-# Frontend (new terminal)
-cd apps/web
-npm install
-npm run dev
-# Open http://localhost:3000
+# 2. Create virtual environment and install dependencies
+python -m venv .venv
+# On Windows:
+.venv\Scripts\activate
+# On macOS/Linux:
+source .venv/bin/activate
+
+pip install -e ".[dev]"
+
+# 3. Configure environment variables
+cp .env.example .env
+
+# 4. Seed the database
+python -m app.seed
+
+# 5. Start the FastAPI server
+uvicorn app.main:app --reload --port 8000
 ```
 
-### Make commands
+### Frontend
 
 ```bash
-make dev          # docker-compose up (all services)
-make dev-api      # uvicorn with --reload
-make dev-web      # next dev
-make seed         # seed the database
-make migrate      # alembic upgrade head
-make test         # run all tests
-make lint         # ruff + mypy + eslint + tsc
+# 1. Navigate to frontend directory
+cd apps/web
+
+# 2. Install dependencies
+npm install
+
+# 3. Configure environment variables
+cp .env.example .env.local
+
+# 4. Start Next.js development server
+npm run dev
 ```
 
----
+Open http://localhost:3000 in your browser.
+
+### Seeding the Database
+
+The database automatically seeds default users and mock upcoming/recent meetings on startup if `SEED_ON_START=true`. You can also trigger manual seeding at any time:
+
+```bash
+cd apps/api
+python -m app.seed
+```
 
 ## Environment Variables
 
-### `apps/api/.env`
-
-| Variable | Default | Required | Description |
-|---|---|---|---|
-| `DATABASE_URL` | `sqlite+aiosqlite:///./data/app.db` | ✅ | SQLAlchemy async DB URL |
-| `REDIS_URL` | _(none)_ | ❌ | Redis URL; MemoryStore used if absent |
-| `AUTH_MODE` | `demo` | ✅ | `demo` = auto-login as seed user; `full` = require auth |
-| `JWT_ACCESS_SECRET` | _(dev default)_ | ✅ prod | HMAC secret for access tokens |
-| `JWT_REFRESH_SECRET` | _(dev default)_ | ✅ prod | HMAC secret for refresh tokens |
-| `OTP_HMAC_SECRET` | _(dev default)_ | ✅ prod | HMAC secret for OTP storage |
-| `WEB_BASE_URL` | `http://localhost:3000` | ✅ | Used in invite links |
-| `ALLOWED_ORIGINS` | `http://localhost:3000` | ✅ | Comma-separated CORS origins |
-| `SEED_ON_START` | `true` | ❌ | Run seed on startup |
-| `SEED_DEFAULT_USER_NAME` | `Anil Kumawat` | ❌ | Demo user display name |
-| `EXPOSE_DEV_OTP` | `true` | ❌ | Log OTP to console (non-prod only) |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` | _(none)_ | ❌ | Email; ConsoleSender used if absent |
-
-### `apps/web/.env.local`
+### Backend (`apps/api/.env`)
 
 | Variable | Default | Description |
 |---|---|---|
-| `API_ORIGIN` | `http://localhost:8000` | FastAPI URL for Next.js rewrites |
-| `NEXT_PUBLIC_WS_URL` | `ws://localhost:8000` | WebSocket base URL (direct) |
-| `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | Public app URL |
-| `NEXT_PUBLIC_AUTH_MODE` | `demo` | Controls middleware and UI hints |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./data/app.db` | Async database connection URL |
+| `REDIS_URL` | `redis://localhost:6379` | Redis connection URL (falls back to memory store if unavailable) |
+| `AUTH_MODE` | `demo` | Set to `demo` for automated demo user login or `full` for strict JWT auth |
+| `JWT_ACCESS_SECRET` | `change-me-in-production` | Secret key for signing access tokens |
+| `JWT_REFRESH_SECRET` | `change-me-in-production` | Secret key for signing refresh tokens |
+| `OTP_HMAC_SECRET` | `change-me-in-production` | Secret key for hashing one-time passwords |
+| `WEB_BASE_URL` | `http://localhost:3000` | Base URL used for invite link generation |
+| `WS_BASE_URL` | `http://localhost:8000` | Base URL used for WebSocket connection establishment |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated allowed CORS origins |
+| `SEED_ON_START` | `true` | Runs database seeder upon application startup |
+| `SEED_DEFAULT_USER_NAME` | `Anil Kumawat` | Display name assigned to the default demo user |
+| `EXPOSE_DEV_OTP` | `true` | Logs generated OTPs to standard output in development mode |
 
----
+### Frontend (`apps/web/.env.local`)
 
-## Project Structure
-
-```
-zoom-clone/
-├── apps/
-│   ├── web/               # Next.js 14+ App Router SPA
-│   │   ├── app/           # Route segments (portal, public, auth, room)
-│   │   ├── features/      # Feature-sliced: dashboard, meetings, room, auth
-│   │   ├── components/    # Shared UI: layout/, ui/, shared/
-│   │   ├── lib/           # api-client, meeting-code, utils, env
-│   │   └── providers/     # QueryProvider, AuthProvider, ToastProvider
-│   └── api/               # FastAPI modular monolith
-│       └── app/
-│           ├── core/      # config, exceptions, ids, clock, logging
-│           ├── db/        # session, base, unit_of_work
-│           ├── infra/     # cache, pubsub, email, rate_limit, events
-│           ├── middleware/ # request_id, access_log, security_headers
-│           ├── modules/   # auth, users, meetings, participants, rooms, chat
-│           ├── api/v1/    # aggregated routers
-│           └── seed/      # idempotent seed data
-├── packages/contracts/    # OpenAPI-generated TypeScript types (shared)
-├── docs/                  # HLD, LLD, DATABASE, REDIS, JOURNEYS, ADRs
-└── docker-compose.yml
-```
-
----
-
-## Feature Tier Checklist
-
-### P0 — Must-have
-
-- [x] ✅ Landing Dashboard (`/home`) — nav, sidebar, profile card, quick actions, upcoming/recent meetings, PMI
-- [x] ✅ Instant meeting — unique 10-digit ID, invite link, redirect to lobby → room
-- [x] ✅ Join meeting — by ID, spaced ID, dashed ID, invite URL, personal link name
-- [x] ✅ Schedule meeting — topic, description, date, time, duration, timezone, passcode, video settings
-- [x] ✅ SQLite schema — 6 tables, constraints, indexes, WAL mode
-- [x] ✅ Alembic migrations + idempotent seed
-- [x] ✅ README + deployment docs
-
-### ⭐ P1 — Preferred (implemented and remaining work)
-
-- [~] 🟡 **Responsive design** — responsive portal/lobby styles exist; room mobile bottom-sheet and viewport coverage remain
-- [~] 🟡 **Authentication** — OTP signup, login, refresh rotation, forgot-password reset, and demo fallback work; refresh-session revocation and production cookie hardening remain
-- [~] 🟡 **Host controls** — mute and remove authorization/state updates work; host reassignment, durable participant status, and cross-instance enforcement remain
-- [~] 🟡 **Redis** — rate limiting, OTP, refresh allowlist, WS tickets, presence, cache-aside, idempotency, and readiness checks are wired; pub/sub fan-out and distributed locks remain
-- [~] 🟡 **Real-time room presence** — snapshot, media, hand, join/leave, and toasts work on one API instance; heartbeat/reaper and cross-instance presence remain
-- [~] 🟡 **Engineering quality** — CI/build/type-check paths exist; broader auth/room/Redis integration coverage and responsive E2E coverage remain
-- [~] 🟡 **Docs** — core docs exist; `JOURNEYS.md` and tier status still need alignment with the executable Redis/pub-sub and host-control behavior
-
-### P2 — Stretch
-
-- [x] ✅ WebRTC video mesh (≤4 peers) — signaling, camera capture, renegotiation, and remote streams
-- [~] 🟡 In-meeting chat — outbound and server relay exist; inbound UI handling remains
-- [~] 🟡 Reactions / raise hand — raise-hand state works; reaction UI/server event handling remains
-- [ ] ⏳ Screen share
-
----
-
-## Deployment
-
-| Service | Platform | URL |
+| Variable | Default | Description |
 |---|---|---|
-| Frontend | Vercel | `https://zoom-clone-web.vercel.app` _(update after deploy)_ |
-| API | Render / Railway | `https://zoom-clone-api.onrender.com` _(update after deploy)_ |
-| Redis | Render Key Value / Upstash | Managed |
-
-### Vercel (web)
-
-1. Import `apps/web` as the root.
-2. Set env vars: `API_ORIGIN`, `NEXT_PUBLIC_WS_URL`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_AUTH_MODE=demo`.
-
-### Render (api)
-
-1. Create a Web Service from `apps/api`, Dockerfile runtime.
-2. Add a Persistent Disk at `/app/data` for SQLite.
-3. Set all required env vars.
-4. Add a Redis instance; set `REDIS_URL`.
-
----
+| `API_ORIGIN` | `http://localhost:8000` | Backend API origin for Next.js HTTP rewrites |
+| `NEXT_PUBLIC_WS_URL` | `ws://localhost:8000` | Direct backend WebSocket URL |
+| `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | Public URL of the frontend application |
+| `NEXT_PUBLIC_AUTH_MODE` | `demo` | Authentication mode flag (`demo` or `full`) |
 
 ## Assumptions
 
-1. **Default user pre-logged in** (`AUTH_MODE=demo`): evaluators can use the app without creating an account. The demo user has Personal Meeting ID `833 834 7512`.
-2. **10-digit numeric Meeting IDs**: generated with `secrets.randbelow` over a 9-billion range; UNIQUE constraint + retry on collision.
-3. **"New Meeting" label** used instead of Zoom's "Host" to match the assignment wording; a tooltip says "Host a meeting".
-4. **Mesh WebRTC** (P2): capped at ~4 peers; SFU (LiveKit/mediasoup) is the documented upgrade path.
-5. **SQLite on persistent disk**: if the platform has no persistent disk, the DB is re-seeded on boot (documented; demo still works).
-6. **SMTP optional**: if `SMTP_HOST` is not set, OTPs are logged to the console (guarded by `EXPOSE_DEV_OTP=true`); evaluators can complete signup.
-7. **Redis optional**: if `REDIS_URL` is not set, `MemoryStore` (in-process) is used. Pub/sub fan-out works within a single instance.
-8. **Timezone display**: stored as IANA string; converted at the client using `date-fns-tz`.
+1. **Default User Logged In**: `AUTH_MODE=demo` is active by default to eliminate onboarding friction for evaluators. The default user is seeded as `Anil Kumawat` with Personal Meeting ID `833 834 7512`.
+2. **10-Digit Meeting IDs**: Generated using uniform cryptographic distribution over 9 billion possible identifiers, backed by database uniqueness constraints with collision retry logic.
+3. **P2P WebRTC Mesh**: Built for small-group conferences (2 to 4 participants). Larger room sizes are architected to transition to a Selective Forwarding Unit (SFU) server.
+4. **WebSocket Authentication**: Utilizes single-use 30-second ticket tokens exchanged over HTTP before WebSocket connection upgrade, preventing token exposure in server access logs.
+5. **Decoupled Audio Playback**: Background audio streams are isolated from video element lifecycles to prevent audio interruption when participants turn off their cameras.
 
----
+## Known Limitations / Future Improvements
 
-## Known Limitations
-
-- SQLite is single-writer; under high concurrent writes it serializes (WAL + busy_timeout handles this). Postgres upgrade is a `DATABASE_URL` change.
-- MemoryStore pub/sub is no-op: multiple API instances cannot cross-communicate without Redis.
-- WebRTC uses a small-room mesh with browser STUN support; it needs TURN/SFU infrastructure for production scale.
-- In-process event bus loses events if the process crashes (upgrade: transactional outbox pattern).
-- Waiting room is stored in `meeting_settings` but not enforced in the WebSocket flow (P2).
-
----
-
-## Running Tests
-
-```bash
-# API tests
-cd apps/api
-pytest tests/ -v --tb=short
-
-# Web tests
-cd apps/web
-npm test              # Vitest unit tests
-npm run test:e2e      # Playwright end-to-end
-
-# Type checks
-cd apps/api && mypy app/ --ignore-missing-imports
-cd apps/web && npx tsc --noEmit
-```
-
----
-
-## License
-
-MIT — see [LICENSE](./LICENSE).
+- **WebRTC Scalability (SFU Transition)**: The current implementation utilizes a full client-side mesh topology, which scales at O(N^2) network connections. Production scaling beyond 4 concurrent video streams will integrate an SFU (e.g., LiveKit or mediasoup).
+- **SQLite Concurrency**: SQLite with WAL mode handles multiple concurrent readers and serialized writers. For horizontal multi-node deployments with heavy write concurrency, the persistence layer can be switched to PostgreSQL by updating `DATABASE_URL`.
+- **Screen Sharing**: Video and audio channels are fully functional; screen-capture stream negotiation via `getDisplayMedia` is planned for the next iteration.
+- **Recording & Cloud Storage**: Meeting attendance and session timestamps are stored; server-side composite stream recording will be added via external media pipeline workers.
