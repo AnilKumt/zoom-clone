@@ -111,9 +111,24 @@ export default function MeetingRoomPage() {
       setRemoteStreams((current) => ({ ...current, [participantId]: stream }));
     };
 
+    // Resolve clean, valid WebSocket URL targeting backend WebSocket server
+    let wsUrl = parsed.ws_url || '';
+    const configuredWs = process.env.NEXT_PUBLIC_WS_URL;
+
+    if (configuredWs) {
+      const cleanBase = configuredWs.replace(/^http/, 'ws').replace(/\/+$/, '');
+      if (!wsUrl || wsUrl.includes('localhost') || wsUrl.includes('netlify.app') || wsUrl.includes('vercel.app')) {
+        wsUrl = `${cleanBase}/api/v1/ws/rooms/${code}`;
+      }
+    }
+
+    if (wsUrl) {
+      wsUrl = wsUrl.replace(/([^:])\/\/+/g, '$1/');
+    }
+
     const client = new RoomSocketClient(
       code,
-      parsed.ws_url,
+      wsUrl,
       parsed.ws_ticket,
       () => {
         router.push(ROUTES.HOME);

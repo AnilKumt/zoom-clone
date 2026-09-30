@@ -189,13 +189,23 @@ class MeetingService:
         )
 
         settings_cfg = get_settings()
-        ws_base = settings_cfg.web_base_url.replace("http://", "ws://").replace("https://", "wss://")
-        ws_url = ws_base.replace(":3000", ":8000")
+        raw_ws_base = (settings_cfg.ws_base_url or "").strip().rstrip("/")
+        if not raw_ws_base:
+            raw_ws_base = (settings_cfg.web_base_url or "http://localhost:8000").strip().rstrip("/")
+
+        if raw_ws_base.startswith("https://"):
+            ws_base = "wss://" + raw_ws_base[8:]
+        elif raw_ws_base.startswith("http://"):
+            ws_base = "ws://" + raw_ws_base[7:]
+        elif raw_ws_base.startswith("wss://") or raw_ws_base.startswith("ws://"):
+            ws_base = raw_ws_base
+        else:
+            ws_base = f"wss://{raw_ws_base}"
 
         return {
             "participant_id": participant.id,
             "role": role,
-            "ws_url": f"{ws_url}/api/v1/ws/rooms/{code}",
+            "ws_url": f"{ws_base}/api/v1/ws/rooms/{code}",
             "ws_ticket": ticket,
             "ice_servers": [{"urls": "stun:stun.l.google.com:19302"}],
         }

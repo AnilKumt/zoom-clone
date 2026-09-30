@@ -37,6 +37,7 @@ class Settings(BaseSettings):
 
     # CORS / security
     web_base_url: str = "http://localhost:3000"
+    ws_base_url: str = "http://localhost:8000"
     allowed_origins: str = "http://localhost:3000"
     trusted_proxy_ips: str = "127.0.0.1"
 

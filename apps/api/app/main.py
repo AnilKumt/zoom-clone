@@ -64,6 +64,8 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
     app.include_router(api_router, prefix="/api/v1")
+    from app.modules.rooms.ws_router import router as rooms_router
+    app.include_router(rooms_router, prefix="")
 
     return app
 
