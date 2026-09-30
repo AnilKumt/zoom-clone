@@ -65,7 +65,6 @@ export default function MeetingRoomPage() {
   const socketClientRef = useRef<RoomSocketClient | null>(null);
   const peerManagerRef = useRef<RoomPeerManager | null>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const [containerDim, setContainerDim] = useState({ width: 800, height: 600 });
@@ -151,9 +150,14 @@ export default function MeetingRoomPage() {
     client.connect();
 
     navigator.mediaDevices?.getUserMedia({ video: true, audio: true }).then((stream) => {
+      stream.getAudioTracks().forEach((t) => {
+        t.enabled = initialMedia.audio;
+      });
+      stream.getVideoTracks().forEach((t) => {
+        t.enabled = initialMedia.video;
+      });
       setLocalStream(stream);
       peerManager.addLocalStream(stream);
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
     }).catch(() => {
       toast.info('Camera or microphone unavailable. You joined in avatar mode.');
     });
@@ -175,11 +179,20 @@ export default function MeetingRoomPage() {
     };
   }, [code, router, setSelfId, updateMediaState]);
 
+  // Sync physical microphone/camera tracks when media state changes
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-    }
-  }, [localStream]);
+    if (!localStream || !self) return;
+    localStream.getAudioTracks().forEach((track) => {
+      if (track.enabled !== self.audio) {
+        track.enabled = self.audio;
+      }
+    });
+    localStream.getVideoTracks().forEach((track) => {
+      if (track.enabled !== self.video) {
+        track.enabled = self.video;
+      }
+    });
+  }, [self?.audio, self?.video, localStream]);
 
   useEffect(() => {
     const peerManager = peerManagerRef.current;
@@ -219,7 +232,7 @@ export default function MeetingRoomPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [self, panel, allowSelfUnmute]);
+  }, [self, panel, allowSelfUnmute, localStream]);
 
   const toggleAudio = () => {
     if (!self) return;
@@ -228,6 +241,11 @@ export default function MeetingRoomPage() {
       return;
     }
     const newAudio = !self.audio;
+    if (localStream) {
+      localStream.getAudioTracks().forEach((track) => {
+        track.enabled = newAudio;
+      });
+    }
     socketClientRef.current?.send('media.state', {
       audio: newAudio,
       video: self.video,
@@ -238,6 +256,11 @@ export default function MeetingRoomPage() {
   const toggleVideo = () => {
     if (!self) return;
     const newVideo = !self.video;
+    if (localStream) {
+      localStream.getVideoTracks().forEach((track) => {
+        track.enabled = newVideo;
+      });
+    }
     socketClientRef.current?.send('media.state', {
       audio: self.audio,
       video: newVideo,
@@ -395,6 +418,22 @@ export default function MeetingRoomPage() {
         </div>
       </header>
 
+      {/* Remote Audio Playback Elements (never unmounted on video toggle) */}
+      <div className="hidden" aria-hidden="true">
+        {Object.entries(remoteStreams).map(([peerId, stream]) => (
+          <audio
+            key={`remote-audio-${peerId}`}
+            autoPlay
+            playsInline
+            ref={(element) => {
+              if (element && element.srcObject !== stream) {
+                element.srcObject = stream;
+              }
+            }}
+          />
+        ))}
+      </div>
+
       {/* STAGE (Dynamic Video Grid + Docked Side Panel) */}
       <main className="flex flex-1 overflow-hidden relative">
         <div
@@ -429,15 +468,20 @@ export default function MeetingRoomPage() {
                     <div className="h-full w-full bg-black/40 flex items-center justify-center">
                       {isSelf ? (
                         <video
-                          ref={localVideoRef}
                           autoPlay
                           muted
                           playsInline
+                          ref={(element) => {
+                            if (element && element.srcObject !== localStream) {
+                              element.srcObject = localStream;
+                            }
+                          }}
                           className="h-full w-full object-cover transform -scale-x-100"
                         />
                       ) : remoteStreams[p.id] ? (
                         <video
                           autoPlay
+                          muted
                           playsInline
                           ref={(element) => {
                             if (element && element.srcObject !== remoteStreams[p.id]) {

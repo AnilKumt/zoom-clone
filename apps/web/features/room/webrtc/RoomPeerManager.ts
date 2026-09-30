@@ -7,6 +7,7 @@ export type RtcSignal = {
 
 export class RoomPeerManager {
   private peers = new Map<string, RTCPeerConnection>();
+  private pendingCandidates = new Map<string, RTCIceCandidateInit[]>();
   private localStream: MediaStream | null = null;
 
   constructor(
@@ -27,8 +28,8 @@ export class RoomPeerManager {
       }
     };
     peer.ontrack = (event) => {
-      const stream = event.streams[0];
-      if (stream) this.onRemoteStream(participantId, stream);
+      const stream = event.streams[0] || new MediaStream([event.track]);
+      this.onRemoteStream(participantId, stream);
     };
     peer.onconnectionstatechange = () => {
       if (['failed', 'closed', 'disconnected'].includes(peer.connectionState)) {
@@ -73,17 +74,44 @@ export class RoomPeerManager {
       await this.connectTo(signal.from_id, false);
       const peer = this.peers.get(signal.from_id);
       if (!peer) return;
-      await peer.setRemoteDescription(signal.sdp);
+      await peer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      await this.flushPendingCandidates(signal.from_id, peer);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
       this.send('rtc.answer', { target_id: signal.from_id, sdp: answer });
     } else if (signal.sdp?.type === 'answer') {
       const peer = this.peers.get(signal.from_id);
-      if (peer) await peer.setRemoteDescription(signal.sdp);
+      if (peer) {
+        await peer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+        await this.flushPendingCandidates(signal.from_id, peer);
+      }
     } else if (signal.candidate) {
       const peer = this.peers.get(signal.from_id);
-      if (peer) await peer.addIceCandidate(signal.candidate);
+      if (peer && peer.remoteDescription && peer.remoteDescription.type) {
+        try {
+          await peer.addIceCandidate(new RTCIceCandidate(signal.candidate));
+        } catch (err) {
+          console.warn('Failed to add ICE candidate:', err);
+        }
+      } else {
+        const queue = this.pendingCandidates.get(signal.from_id) || [];
+        queue.push(signal.candidate);
+        this.pendingCandidates.set(signal.from_id, queue);
+      }
     }
+  }
+
+  private async flushPendingCandidates(participantId: string, peer: RTCPeerConnection): Promise<void> {
+    const queue = this.pendingCandidates.get(participantId);
+    if (!queue || queue.length === 0) return;
+    for (const candidate of queue) {
+      try {
+        await peer.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.warn('Failed to add queued ICE candidate:', err);
+      }
+    }
+    this.pendingCandidates.delete(participantId);
   }
 
   async replaceVideoTrack(track: MediaStreamTrack): Promise<void> {
@@ -103,6 +131,7 @@ export class RoomPeerManager {
   remove(participantId: string): void {
     this.peers.get(participantId)?.close();
     this.peers.delete(participantId);
+    this.pendingCandidates.delete(participantId);
   }
 
   close(): void {
