@@ -38,6 +38,11 @@ class ConnectionManager:
         }
         await websocket.send_text(json.dumps(envelope))
 
+    async def send_to_participant(self, room_code: str, participant_id: str, msg_type: str, payload: Any) -> None:
+        websocket = self._rooms.get(room_code, {}).get(participant_id)
+        if websocket is not None:
+            await self.send_personal(websocket, msg_type, payload)
+
     async def broadcast_local(self, room_code: str, msg_type: str, payload: Any, exclude_pid: str | None = None) -> None:
         if room_code not in self._rooms:
             return

@@ -12,6 +12,8 @@ from app.modules.rooms.handlers.media import (
     HandToggleHandler,
     ChatMessageHandler,
     HostCommandsHandler,
+    ReactionHandler,
+    RtcSignalHandler,
 )
 
 logger = logging.getLogger("ws_room")
@@ -27,6 +29,9 @@ _dispatcher = Dispatcher()
 _dispatcher.register(MediaStateHandler())
 _dispatcher.register(HandToggleHandler())
 _dispatcher.register(ChatMessageHandler())
+_dispatcher.register(ReactionHandler())
+for _rtc_type in ("rtc.offer", "rtc.answer", "rtc.ice"):
+    _dispatcher.register(RtcSignalHandler(_rtc_type))
 _dispatcher.register(HostCommandsHandler())
 
 

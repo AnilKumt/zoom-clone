@@ -4,6 +4,8 @@ from app.modules.meetings.router import router as meetings_router
 from app.modules.users.router import router as users_router
 from app.modules.auth.router import router as auth_router
 from app.modules.rooms.ws_router import router as rooms_router
+from app.infra.cache.factory import get_cache_store
+from app.core.config import get_settings
 
 api_router = APIRouter()
 
@@ -31,8 +33,14 @@ async def readiness_check() -> dict:
     except Exception as e:
         errors.append(f"db: {e}")
 
-    # Redis is optional — MemoryStore always ready
-    checks["redis"] = True
+    try:
+        settings = get_settings()
+        await get_cache_store().get("healthcheck:readiness")
+        checks["redis"] = True
+        if not settings.redis_url:
+            errors.append("redis: using in-memory fallback")
+    except Exception as e:
+        errors.append(f"redis: {e}")
 
     all_ok = all(checks.values())
     return {"status": "ok" if all_ok else "degraded", "checks": checks, "errors": errors}

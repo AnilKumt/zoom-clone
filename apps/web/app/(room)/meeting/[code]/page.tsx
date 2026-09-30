@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useRoomStore } from '@/features/room/store/roomStore';
 import { RoomSocketClient } from '@/features/room/socket/RoomSocketClient';
+import { RoomPeerManager } from '@/features/room/webrtc/RoomPeerManager';
 import { computeGrid } from '@/features/room/lib/computeGrid';
 import { canPerformAction } from '@/features/room/lib/permissions';
 import { getInitials, formatMeetingId } from '@/lib/utils';
@@ -62,8 +63,11 @@ export default function MeetingRoomPage() {
   const [chatInput, setChatInput] = useState('');
 
   const socketClientRef = useRef<RoomSocketClient | null>(null);
+  const peerManagerRef = useRef<RoomPeerManager | null>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const [containerDim, setContainerDim] = useState({ width: 800, height: 600 });
 
   const participantList = useMemo(() => Object.values(participants), [participants]);
@@ -96,12 +100,16 @@ export default function MeetingRoomPage() {
 
     const parsed = JSON.parse(stored) as JoinResult;
     setJoinResult(parsed);
-    setSelfId(parsed.participant.id);
+    setSelfId(parsed.participant_id);
 
     const initialMediaStr = sessionStorage.getItem(`room_${code}_initial_media`);
     const initialMedia = initialMediaStr
       ? JSON.parse(initialMediaStr)
       : { audio: true, video: true };
+
+    const handleRemoteStream = (participantId: string, stream: MediaStream) => {
+      setRemoteStreams((current) => ({ ...current, [participantId]: stream }));
+    };
 
     const client = new RoomSocketClient(
       code,
@@ -109,11 +117,31 @@ export default function MeetingRoomPage() {
       parsed.ws_ticket,
       () => {
         router.push(ROUTES.HOME);
+      },
+      (message) => {
+        if (message.type === 'rtc.offer' || message.type === 'rtc.answer' || message.type === 'rtc.ice') {
+          void peerManagerRef.current?.handleSignal(message.payload as { from_id: string; target_id?: string; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit });
+        }
       }
     );
 
     socketClientRef.current = client;
+    const peerManager = new RoomPeerManager(
+      parsed.participant_id,
+      parsed.ice_servers,
+      (type, payload) => client.send(type, payload),
+      handleRemoteStream
+    );
+    peerManagerRef.current = peerManager;
     client.connect();
+
+    navigator.mediaDevices?.getUserMedia({ video: true, audio: true }).then((stream) => {
+      setLocalStream(stream);
+      peerManager.addLocalStream(stream);
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+    }).catch(() => {
+      toast.info('Camera or microphone unavailable. You joined in avatar mode.');
+    });
 
     // Broadcast initial media state
     setTimeout(() => {
@@ -121,13 +149,32 @@ export default function MeetingRoomPage() {
         audio: initialMedia.audio,
         video: initialMedia.video,
       });
-      updateMediaState(parsed.participant.id, initialMedia.audio, initialMedia.video);
+      updateMediaState(parsed.participant_id, initialMedia.audio, initialMedia.video);
     }, 500);
 
     return () => {
       client.disconnect();
+      peerManager.close();
+      localStream?.getTracks().forEach((track) => track.stop());
+      setRemoteStreams({});
     };
   }, [code, router, setSelfId, updateMediaState]);
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  useEffect(() => {
+    const peerManager = peerManagerRef.current;
+    if (!peerManager || !selfId) return;
+    participantList.forEach((participant) => {
+      if (participant.id !== selfId) {
+        void peerManager.connectTo(participant.id, selfId < participant.id);
+      }
+    });
+  }, [participantList, selfId]);
 
   // Keyboard shortcuts: Alt+A (mute), Alt+V (video), Alt+U (participants), Alt+H (chat), Alt+Y (hand), Alt+Q (leave)
   useEffect(() => {
@@ -372,6 +419,17 @@ export default function MeetingRoomPage() {
                           muted
                           playsInline
                           className="h-full w-full object-cover transform -scale-x-100"
+                        />
+                      ) : remoteStreams[p.id] ? (
+                        <video
+                          autoPlay
+                          playsInline
+                          ref={(element) => {
+                            if (element && element.srcObject !== remoteStreams[p.id]) {
+                              element.srcObject = remoteStreams[p.id];
+                            }
+                          }}
+                          className="h-full w-full object-cover"
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center bg-zinc-800 text-white/40 text-sm font-medium">

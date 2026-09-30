@@ -148,21 +148,21 @@ zoom-clone/
 - [x] ✅ Alembic migrations + idempotent seed
 - [x] ✅ README + deployment docs
 
-### ⭐ P1 — Preferred (all implemented)
+### ⭐ P1 — Preferred (implemented and remaining work)
 
-- [x] ✅ **Responsive design** — 360 / 768 / 1280 / 1920; sidebar collapses; room toolbar adapts
-- [x] ✅ **Authentication** — Email OTP signup, login, JWT access+refresh in httpOnly cookies, refresh rotation, forgot password, demo-user fallback
-- [x] ✅ **Host controls** — Mute all, mute one, remove participant, end meeting for all, host reassignment; **enforced on server**
-- [x] ✅ **Redis** — Rate limiting, OTP + lockouts, refresh-token allowlist, WS tickets, presence, pub/sub fan-out, cache-aside, idempotency keys, distributed lock
-- [x] ✅ **Real-time room presence** — WebSocket: live participant list, mute/hand state, join/leave toasts
-- [x] ✅ **Engineering quality** — pytest, Vitest, 1 Playwright e2e, CI, lint/type-check, structured logs, `/healthz` + `/readyz`
-- [x] ✅ **Docs** — `JOURNEYS.md` (ELI5 style), HLD, LLD, DATABASE, REDIS, SECURITY, DESIGN_PRINCIPLES, ADRs
+- [~] 🟡 **Responsive design** — responsive portal/lobby styles exist; room mobile bottom-sheet and viewport coverage remain
+- [~] 🟡 **Authentication** — OTP signup, login, refresh rotation, forgot-password reset, and demo fallback work; refresh-session revocation and production cookie hardening remain
+- [~] 🟡 **Host controls** — mute and remove authorization/state updates work; host reassignment, durable participant status, and cross-instance enforcement remain
+- [~] 🟡 **Redis** — rate limiting, OTP, refresh allowlist, WS tickets, presence, cache-aside, idempotency, and readiness checks are wired; pub/sub fan-out and distributed locks remain
+- [~] 🟡 **Real-time room presence** — snapshot, media, hand, join/leave, and toasts work on one API instance; heartbeat/reaper and cross-instance presence remain
+- [~] 🟡 **Engineering quality** — CI/build/type-check paths exist; broader auth/room/Redis integration coverage and responsive E2E coverage remain
+- [~] 🟡 **Docs** — core docs exist; `JOURNEYS.md` and tier status still need alignment with the executable Redis/pub-sub and host-control behavior
 
 ### P2 — Stretch
 
-- [ ] ⏳ WebRTC video mesh (≤4 peers) — signaling present, getUserMedia on lobby
-- [ ] ⏳ In-meeting chat
-- [ ] ⏳ Reactions / raise hand (hand state tracked in WS)
+- [x] ✅ WebRTC video mesh (≤4 peers) — signaling, camera capture, renegotiation, and remote streams
+- [~] 🟡 In-meeting chat — outbound and server relay exist; inbound UI handling remains
+- [~] 🟡 Reactions / raise hand — raise-hand state works; reaction UI/server event handling remains
 - [ ] ⏳ Screen share
 
 ---
@@ -206,7 +206,7 @@ zoom-clone/
 
 - SQLite is single-writer; under high concurrent writes it serializes (WAL + busy_timeout handles this). Postgres upgrade is a `DATABASE_URL` change.
 - MemoryStore pub/sub is no-op: multiple API instances cannot cross-communicate without Redis.
-- WebRTC video (P2) is not implemented; camera preview is shown in the lobby; room shows avatar tiles.
+- WebRTC uses a small-room mesh with browser STUN support; it needs TURN/SFU infrastructure for production scale.
 - In-process event bus loses events if the process crashes (upgrade: transactional outbox pattern).
 - Waiting room is stored in `meeting_settings` but not enforced in the WebSocket flow (P2).
 

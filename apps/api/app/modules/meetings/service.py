@@ -2,27 +2,36 @@
 Meeting domain service — orchestrates creation, scheduling, joining.
 All business rules live here; no HTTP or SQL concerns.
 """
-from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
+import json
+import secrets
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-import secrets
-import json
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.meetings.models import Meeting, MeetingSettings, Participant
-from app.modules.meetings.schemas import ScheduleMeetingRequest, JoinMeetingRequest
-from app.modules.users.models import User
-from app.core.ids import generate_ulid, generate_meeting_code
-from app.core.constants import MEETING_CODE_MAX_RETRIES, WS_TICKET_TTL_SECONDS
-from app.core.exceptions import NotFoundError, MeetingNotJoinableError, ConflictError
 from app.core.config import get_settings
+from app.core.constants import MEETING_CODE_MAX_RETRIES, WS_TICKET_TTL_SECONDS
+from app.core.exceptions import ConflictError, MeetingNotJoinableError, NotFoundError
+from app.core.ids import generate_meeting_code, generate_ulid
+from app.infra.cache.base import KeyValueStore
+from app.modules.meetings.cache import (
+    cache_public_meeting,
+    get_cached_public_meeting,
+    invalidate_public_meeting,
+)
+from app.modules.meetings.domain import MeetingDomain
+from app.modules.meetings.models import Meeting, MeetingSettings, Participant
+from app.modules.meetings.schemas import JoinMeetingRequest, ScheduleMeetingRequest
+from app.modules.users.models import User
 
 
 class MeetingService:
     """Handles instant meeting, scheduling, joining, and state transitions."""
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(self, db: AsyncSession, cache: KeyValueStore) -> None:
         self._db = db
+        self._cache = cache
 
     async def create_instant(self, user: User) -> tuple[Meeting, str]:
         """Create and immediately start an instant meeting. Returns (meeting, invite_url)."""
@@ -33,7 +42,7 @@ class MeetingService:
             title=title,
             kind="instant",
             status="live",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
         invite_url = f"{settings.web_base_url}/j/{meeting.meeting_code}"
         return meeting, invite_url
@@ -61,19 +70,26 @@ class MeetingService:
 
     async def get_public(self, code: str) -> dict:  # type: ignore[type-arg]
         """Return minimal info about a meeting for the join page (no auth required)."""
+        cached = await get_cached_public_meeting(code, self._cache)
+        if cached is not None:
+            return cached
+
         meeting = await self._get_by_code(code)
         if not meeting:
-            return {
+            result = {
                 "exists": False, "status": None,
                 "title": None, "host_name": None, "requires_passcode": False,
             }
-        return {
-            "exists": True,
-            "status": meeting.status,
-            "title": meeting.title,
-            "host_name": meeting.host.name if meeting.host else None,
-            "requires_passcode": bool(meeting.passcode),
-        }
+        else:
+            result = {
+                "exists": True,
+                "status": meeting.status,
+                "title": meeting.title,
+                "host_name": meeting.host.name if meeting.host else None,
+                "requires_passcode": bool(meeting.passcode),
+            }
+        await cache_public_meeting(code, result, self._cache)
+        return result
 
     async def get_by_code(self, code: str, user: User) -> Meeting:
         meeting = await self._get_by_code(code)
@@ -81,8 +97,29 @@ class MeetingService:
             raise NotFoundError("Meeting", code)
         return meeting
 
+    async def start(self, code: str, user: User) -> Meeting:
+        """Start a scheduled meeting after verifying the requesting host."""
+        meeting = await self.get_by_code(code, user)
+        lifecycle = MeetingDomain(
+            id=meeting.id,
+            meeting_code=meeting.meeting_code,
+            host_id=meeting.host_id,
+            status=meeting.status,
+            scheduled_start_at=meeting.scheduled_start_at,
+            duration_minutes=meeting.duration_minutes,
+            passcode=meeting.passcode,
+            join_before_host=meeting.settings.join_before_host if meeting.settings else False,
+        )
+        lifecycle.start()
+        meeting.status = lifecycle.status
+        meeting.started_at = datetime.now(UTC)
+        await self._db.commit()
+        await self._db.refresh(meeting)
+        await invalidate_public_meeting(code, self._cache)
+        return meeting
+
     async def list_upcoming(self, user: User, limit: int = 20) -> list[Meeting]:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self._db.execute(
             select(Meeting)
             .where(
@@ -132,7 +169,7 @@ class MeetingService:
             display_name=dto.display_name,
             role=role,
             status="joined",
-            joined_at=datetime.now(timezone.utc),
+            joined_at=datetime.now(UTC),
         )
         self._db.add(participant)
         await self._db.commit()
@@ -158,7 +195,7 @@ class MeetingService:
         return {
             "participant_id": participant.id,
             "role": role,
-            "ws_url": f"{ws_url}/ws/rooms/{code}",
+            "ws_url": f"{ws_url}/api/v1/ws/rooms/{code}",
             "ws_ticket": ticket,
             "ice_servers": [{"urls": "stun:stun.l.google.com:19302"}],
         }

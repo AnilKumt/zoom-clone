@@ -151,6 +151,57 @@ class AuthService:
 
         return user, access_token, refresh_token
 
+    async def request_password_reset(self, dto: ForgotPasswordRequest) -> None:
+        """Issue a purpose-scoped reset OTP without revealing whether an email exists."""
+        settings = get_settings()
+        email = dto.email.lower()
+        result = await self._db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+        if not user:
+            return
+        otp = generate_otp()
+        otp_hmac = self._compute_otp_hmac(otp, settings.otp_hmac_secret)
+        await self._cache.set(f"otp:reset:{email}", otp_hmac, ttl=300)
+        await self._cache.set(f"otp_cooldown:reset:{email}", "1", ttl=60)
+        await self._email.send(
+            to=email,
+            subject="Your Zoom Clone Password Reset Code",
+            body=f"Your password reset code is: {otp}. It expires in 5 minutes.",
+        )
+
+    async def verify_password_reset_otp(self, dto: VerifyForgotPasswordRequest) -> str:
+        """Validate a reset OTP and mint a single-use reset token."""
+        settings = get_settings()
+        email = dto.email.lower()
+        stored_hmac = await self._cache.get(f"otp:reset:{email}")
+        if not stored_hmac:
+            raise ValidationError("Invalid or expired verification code.")
+        expected_hmac = self._compute_otp_hmac(dto.otp, settings.otp_hmac_secret)
+        if not hmac.compare_digest(stored_hmac, expected_hmac):
+            raise ValidationError("Incorrect verification code.")
+        result = await self._db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise ValidationError("Invalid or expired verification code.")
+        await self._cache.delete(f"otp:reset:{email}")
+        reset_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(reset_token.encode()).hexdigest()
+        await self._cache.set(f"auth:reset:{token_hash}", user.id, ttl=600)
+        return reset_token
+
+    async def reset_password(self, dto: ResetPasswordRequest) -> None:
+        """Consume a reset token and replace the user's password hash."""
+        token_hash = hashlib.sha256(dto.reset_token.encode()).hexdigest()
+        user_id = await self._cache.get(f"auth:reset:{token_hash}")
+        if not user_id:
+            raise UnauthorizedError("Invalid or expired reset token.")
+        user = await self._db.get(User, user_id)
+        if not user:
+            raise UnauthorizedError("Invalid or expired reset token.")
+        user.password_hash = hash_password(dto.new_password)
+        await self._db.commit()
+        await self._cache.delete(f"auth:reset:{token_hash}")
+
     async def refresh_session(self, refresh_token_str: str) -> tuple[str, str]:
         """Rotate refresh token and issue new pair; detect token reuse."""
         try:

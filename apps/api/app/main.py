@@ -5,6 +5,7 @@ All configuration, middleware, and router registration happens here.
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -14,6 +15,8 @@ from app.middleware.access_log import AccessLogMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.api.v1.router import api_router
 from app.seed.seed import run_seed
+from app.core.exceptions import AppException
+from app.core.error_handlers import app_exception_handler, validation_exception_handler
 
 
 @asynccontextmanager
@@ -56,6 +59,9 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(AccessLogMiddleware)
     app.add_middleware(RequestIdMiddleware)
+
+    app.add_exception_handler(AppException, app_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
     app.include_router(api_router, prefix="/api/v1")
 

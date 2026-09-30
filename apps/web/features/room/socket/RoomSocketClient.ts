@@ -10,6 +10,8 @@ export interface WsEnvelope<T = unknown> {
   payload: T;
 }
 
+export type RoomSocketEvent = WsEnvelope;
+
 export class RoomSocketClient {
   private ws: WebSocket | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
@@ -21,7 +23,8 @@ export class RoomSocketClient {
     private code: string,
     private wsUrl: string,
     private ticket: string,
-    private onEnd?: () => void
+    private onEnd?: () => void,
+    private onEvent?: (msg: RoomSocketEvent) => void
   ) {}
 
   public connect() {
@@ -40,6 +43,7 @@ export class RoomSocketClient {
     this.ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data) as WsEnvelope;
+        this.onEvent?.(msg);
         this.handleMessage(msg);
       } catch (err) {
         console.error('Failed to parse WebSocket message:', err);
@@ -100,6 +104,10 @@ export class RoomSocketClient {
         toast.info(`${p.display_name} joined`);
         break;
       }
+
+      case 'chat.message':
+      case 'reaction.received':
+        break;
 
       case 'participant.left': {
         const p = msg.payload as { id: string; display_name: string };

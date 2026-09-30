@@ -31,6 +31,15 @@ export default function MeetingDetailPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleStartMeeting = async () => {
+    try {
+      await apiClient.post<Meeting>(`/meetings/${code}/start`);
+      router.push(ROUTES.lobby(code));
+    } catch {
+      toast.error('Unable to start meeting');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-8 max-w-3xl mx-auto">
@@ -156,7 +165,7 @@ export default function MeetingDetailPage() {
 
         <div className="flex items-center gap-3 mt-8 pt-6 border-t" style={{ borderColor: 'var(--border)' }}>
           <button
-            onClick={() => router.push(ROUTES.lobby(meeting.meeting_code))}
+            onClick={handleStartMeeting}
             className="btn-primary flex items-center gap-2 px-6 py-2.5 text-sm font-semibold"
           >
             <Video size={16} /> Start Meeting

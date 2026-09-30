@@ -154,4 +154,23 @@ async def forgot_password(
     dto: ForgotPasswordRequest,
     service: AuthService = Depends(get_auth_service),
 ):
+    await service.request_password_reset(dto)
     return {"message": "If the email is registered, reset instructions have been sent."}
+
+
+@router.post("/password/verify-otp")
+async def verify_forgot_password(
+    dto: VerifyForgotPasswordRequest,
+    service: AuthService = Depends(get_auth_service),
+):
+    reset_token = await service.verify_password_reset_otp(dto)
+    return {"reset_token": reset_token}
+
+
+@router.post("/password/reset")
+async def reset_password(
+    dto: ResetPasswordRequest,
+    service: AuthService = Depends(get_auth_service),
+):
+    await service.reset_password(dto)
+    return {"message": "Password reset successfully."}

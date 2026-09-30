@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation';
 
 // Invite links: /j/CODE?pwd=PASSCODE → redirect to lobby
-export default function InviteLinkPage({ params }: { params: { code: string } }) {
-  redirect(`/meeting/${params.code}/lobby`);
+export default async function InviteLinkPage({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}) {
+  const { code } = await params;
+  redirect(`/meeting/${code}/lobby`);
 }

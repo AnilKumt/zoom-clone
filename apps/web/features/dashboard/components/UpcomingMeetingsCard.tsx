@@ -8,6 +8,7 @@ import { formatMeetingId } from '@/lib/utils';
 import type { ApiList, Meeting } from '@/types/api';
 import { ROUTES } from '@/constants/routes';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 export function UpcomingMeetingsCard() {
   const router = useRouter();
@@ -18,8 +19,13 @@ export function UpcomingMeetingsCard() {
 
   const meetings = data?.items ?? [];
 
-  const handleStart = (code: string) => {
-    router.push(ROUTES.lobby(code));
+  const handleStart = async (code: string) => {
+    try {
+      await apiClient.post<Meeting>(`/meetings/${code}/start`);
+      router.push(ROUTES.lobby(code));
+    } catch {
+      toast.error('Unable to start meeting');
+    }
   };
 
   return (

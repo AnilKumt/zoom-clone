@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   // Proxy all /api/* requests to the FastAPI backend
   // This makes cookies first-party (SameSite=Lax works)
   async rewrites() {

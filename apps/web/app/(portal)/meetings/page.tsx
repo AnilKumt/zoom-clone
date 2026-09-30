@@ -10,6 +10,7 @@ import { apiClient } from '@/lib/api-client';
 import { formatMeetingId } from '@/lib/utils';
 import type { ApiList, Meeting } from '@/types/api';
 import { ROUTES } from '@/constants/routes';
+import { toast } from 'sonner';
 
 type Tab = 'upcoming' | 'previous';
 
@@ -23,6 +24,15 @@ export default function MeetingsPage() {
   });
 
   const meetings = data?.items ?? [];
+
+  const handleStart = async (code: string) => {
+    try {
+      await apiClient.post<Meeting>(`/meetings/${code}/start`);
+      router.push(ROUTES.lobby(code));
+    } catch {
+      toast.error('Unable to start meeting');
+    }
+  };
 
   return (
     <div className="p-6 max-w-4xl">
@@ -103,7 +113,7 @@ export default function MeetingsPage() {
               <div className="flex items-center gap-2 shrink-0">
                 {meeting.status === 'scheduled' && (
                   <button
-                    onClick={() => router.push(ROUTES.lobby(meeting.meeting_code))}
+                    onClick={() => handleStart(meeting.meeting_code)}
                     className="px-3 py-1.5 rounded-control text-sm font-medium"
                     style={{ background: 'var(--zoom-blue)', color: 'white' }}
                   >

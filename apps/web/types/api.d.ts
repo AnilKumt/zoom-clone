@@ -67,7 +67,7 @@ export interface Participant {
 }
 
 export interface JoinResult {
-  participant: Participant;
+  participant_id: string;
   role: 'host' | 'co_host' | 'participant';
   ws_url: string;
   ws_ticket: string;
