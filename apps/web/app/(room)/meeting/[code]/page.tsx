@@ -143,6 +143,9 @@ export default function MeetingRoomPage() {
       wsUrl,
       parsed.ws_ticket,
       () => {
+        localStream?.getTracks().forEach((track) => track.stop());
+        peerManagerRef.current?.close();
+        setRemoteStreams({});
         router.push(ROUTES.HOME);
       },
       (message) => {
@@ -166,6 +169,35 @@ export default function MeetingRoomPage() {
           const payload = message.payload as { emoji: string; sender: string; participant_id: string };
           if (payload?.emoji) {
             triggerReaction(payload.emoji, payload.sender || 'Participant', payload.participant_id);
+          }
+        } else if (message.type === 'participant.removed') {
+          toast.error('You were removed from the meeting by the host');
+          localStream?.getTracks().forEach((track) => track.stop());
+          peerManagerRef.current?.close();
+          setRemoteStreams({});
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem(`room_${code}_join`);
+            window.location.href = '/home';
+          }
+        } else if (message.type === 'host.muted_all') {
+          Object.values(participants).forEach((p) => {
+            if (p.role !== 'host') {
+              updateMediaState(p.id, false, p.video);
+            }
+          });
+          if (self?.role !== 'host') {
+            localStream?.getAudioTracks().forEach((t) => { t.enabled = false; });
+            toast.warning('You have been muted by the host');
+          }
+        } else if (message.type === 'host.muted') {
+          const payload = message.payload as { participant_id: string };
+          if (payload?.participant_id) {
+            const p = participants[payload.participant_id];
+            if (p) updateMediaState(payload.participant_id, false, p.video);
+            if (payload.participant_id === selfId) {
+              localStream?.getAudioTracks().forEach((t) => { t.enabled = false; });
+              toast.warning('You have been muted by the host');
+            }
           }
         }
       }
@@ -312,24 +344,48 @@ export default function MeetingRoomPage() {
     socketClientRef.current?.send('host.mute_all', {
       allow_self_unmute: true,
     });
+    Object.values(participants).forEach((p) => {
+      if (p.role !== 'host') {
+        updateMediaState(p.id, false, p.video);
+      }
+    });
     toast.success('Muted all participants');
   };
 
   const handleMuteParticipant = (targetId: string) => {
     socketClientRef.current?.send('host.mute', { participant_id: targetId });
+    const p = participants[targetId];
+    if (p) {
+      updateMediaState(targetId, false, p.video);
+    }
+    toast.success('Muted participant');
   };
 
   const handleRemoveParticipant = (targetId: string) => {
     socketClientRef.current?.send('host.remove', { participant_id: targetId });
+    peerManagerRef.current?.remove(targetId);
+    setRemoteStreams((prev) => {
+      const copy = { ...prev };
+      delete copy[targetId];
+      return copy;
+    });
+    removeParticipant(targetId);
+    toast.info('Participant removed');
   };
 
   const handleEndMeeting = () => {
     socketClientRef.current?.send('host.end', {});
+    localStream?.getTracks().forEach((track) => track.stop());
+    peerManagerRef.current?.close();
+    setRemoteStreams({});
     router.push(ROUTES.HOME);
   };
 
   const handleLeaveMeeting = () => {
     socketClientRef.current?.disconnect();
+    localStream?.getTracks().forEach((track) => track.stop());
+    peerManagerRef.current?.close();
+    setRemoteStreams({});
     router.push(ROUTES.HOME);
   };
 
@@ -350,7 +406,7 @@ export default function MeetingRoomPage() {
     socketClientRef.current?.send('chat.message', {
       id: msgId,
       text: chatInput.trim(),
-      sender_name: self.display_name,
+      sender: self.display_name,
       time: timeStr,
     });
     setChatInput('');
@@ -359,7 +415,6 @@ export default function MeetingRoomPage() {
   const handleSendReaction = (emoji: string) => {
     if (!self) return;
     socketClientRef.current?.send('reaction.send', { emoji });
-    triggerReaction(emoji, self.display_name, self.id);
     setShowReactions(false);
   };
 

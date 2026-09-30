@@ -182,10 +182,15 @@ class HostCommandsHandler:
                 await ctx.manager.send_personal(ctx.ws, "error", {"code": "FORBIDDEN"})
                 return
 
-            # Ban participant & close socket with 4003
+            # 1. Send direct notification to target participant before disconnecting
+            await ctx.manager.send_to_participant(
+                ctx.room_code, target_id, "participant.removed", {"reason": "removed_by_host"}
+            )
+            # 2. Ban participant & close socket
             await ctx.cache.sadd(f"room:{ctx.room_code}:banned", target_id)
             await ctx.cache.hdel(f"room:{ctx.room_code}:presence", target_id)
             await ctx.manager.close_participant(ctx.room_code, target_id, code=4003, reason="Removed by host")
+            # 3. Broadcast left event to remaining participants
             await ctx.manager.broadcast_local(
                 ctx.room_code,
                 "participant.left",

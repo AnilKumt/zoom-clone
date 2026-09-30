@@ -126,27 +126,38 @@ export class RoomSocketClient {
         const payload = msg.payload as { allow_self_unmute: boolean; by?: string };
         store.setAllowSelfUnmute(payload.allow_self_unmute);
         const selfId = store.selfId;
-        if (selfId) {
-          const self = store.participants[selfId];
-          if (self && self.role !== 'host') {
-            store.updateMediaState(selfId, false, self.video);
-            toast.warning('You have been muted by the host');
+        const currentParticipants = store.participants;
+        Object.values(currentParticipants).forEach((p) => {
+          if (p.role !== 'host') {
+            store.updateMediaState(p.id, false, p.video);
           }
+        });
+        if (selfId && store.participants[selfId]?.role !== 'host') {
+          toast.warning('You have been muted by the host');
         }
         break;
       }
 
       case 'host.muted': {
         const payload = msg.payload as { participant_id: string };
+        const p = store.participants[payload.participant_id];
+        if (p) {
+          store.updateMediaState(payload.participant_id, false, p.video);
+        }
         if (payload.participant_id === store.selfId) {
-          const self = store.participants[store.selfId];
-          if (self) {
-            store.updateMediaState(store.selfId, false, self.video);
-            toast.warning('You have been muted by the host');
-          }
-        } else {
-          const p = store.participants[payload.participant_id];
-          if (p) store.updateMediaState(payload.participant_id, false, p.video);
+          toast.warning('You have been muted by the host');
+        }
+        break;
+      }
+
+      case 'participant.removed': {
+        toast.error('You were removed from the meeting by the host');
+        this.isIntentionallyClosed = true;
+        this.disconnect();
+        this.onEnd?.();
+        if (typeof window !== 'undefined') {
+          sessionStorage.clear();
+          window.location.href = '/home';
         }
         break;
       }
