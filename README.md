@@ -1,5 +1,7 @@
 # Zoom Clone - Web Conferencing Platform
 
+![Zoom Banner](images/zoom_banner.png)
+
 A full-stack Zoom web application clone built with Next.js, FastAPI, SQLite, and WebSockets. The application replicates Zoom's core portal design, meeting scheduling workflows, participant management, and real-time audio/video communication.
 
 ---
@@ -29,29 +31,7 @@ A full-stack Zoom web application clone built with Next.js, FastAPI, SQLite, and
 
 The platform separates persistent domain entities from ephemeral real-time state. Next.js handles portal routing and meeting room rendering, communicating via HTTP REST for transactional operations and WebSockets for real-time room events.
 
-```mermaid
-graph TD
-    UserClient[Web Browser Client] -->|HTTP REST| APIGateway[FastAPI Application Server]
-    UserClient -->|WebSocket Connection| WSRouter["WebSocket Room Handler (/ws/rooms/{code})"]
-    UserClient <-->|WebRTC Media Mesh| PeerClient[Remote Participant Browsers]
-
-    subgraph Backend Services
-        APIGateway --> MeetingService[Meeting Lifecycle Service]
-        APIGateway --> UserService[User & Profile Service]
-        APIGateway --> AuthService[Authentication & Ticket Service]
-        WSRouter --> SignalHandler[WebRTC Signal Dispatcher]
-        WSRouter --> PresenceHandler[Room Presence & Heartbeat]
-        WSRouter --> HostHandler[Host Commands Controller]
-    end
-
-    subgraph Storage Layer
-        MeetingService --> SQLiteDB[(SQLite Database - WAL Mode)]
-        UserService --> SQLiteDB
-        AuthService --> RedisStore[(Redis Key-Value Store)]
-        PresenceHandler --> RedisStore
-        SignalHandler --> RedisStore
-    end
-```
+![System Architecture](images/system_architecture.png)
 
 ### Architectural Highlights
 * **Decoupled State Layers**: Persistent data (users, scheduled meetings, attendance history) lives in SQLite. High-frequency ephemeral data (30-second single-use WebSocket tickets, room presence rosters, signaling messages) is processed in Redis.
@@ -66,35 +46,6 @@ graph TD
 <summary><b>2. Core Meeting Workflows</b></summary>
 
 The application implements Zoom's core user journey from initial dashboard landing to meeting creation, pre-call lobby testing, and in-room collaboration.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Host as Host User
-    actor Guest as Guest User
-    participant API as FastAPI Backend
-    participant DB as SQLite / Redis
-    participant WS as WebSocket Room
-
-    Host->>API: POST /api/v1/meetings/instant
-    API->>DB: Persist meeting row & default settings
-    API-->>Host: 201 Created (10-digit code, invite link)
-    Host->>Host: Enter Lobby (/meeting/{code}/lobby)
-    Host->>API: POST /api/v1/meetings/{code}/join
-    API->>DB: Register participant & issue single-use ticket
-    API-->>Host: ws_url + ws_ticket
-    Host->>WS: Connect WebSocket with ticket
-    WS-->>Host: room.snapshot (presence roster)
-
-    Guest->>API: GET /api/v1/meetings/{code}/public
-    API-->>Guest: Validation (exists, live status, passcode flag)
-    Guest->>Guest: Configure display name in Lobby
-    Guest->>API: POST /api/v1/meetings/{code}/join
-    API-->>Guest: ws_ticket
-    Guest->>WS: Connect WebSocket
-    WS->>Host: participant.joined broadcast
-    Host<-->>Guest: WebRTC Peer Connection (Offer / Answer / ICE)
-```
 
 ### Implemented Workflow Steps
 1. **Landing Dashboard (`/home`)**: Renders Zoom top navigation bar, sidebar, user profile card with Personal Meeting ID (PMI), quick action tiles (Schedule, Join, New Meeting), upcoming meetings list, and previous meeting history.
@@ -112,64 +63,7 @@ sequenceDiagram
 
 The database schema is designed for SQLite in Write-Ahead Logging (WAL) mode, maintaining relational integrity, table normalization, and attendance history.
 
-```mermaid
-erDiagram
-    USERS ||--o{ MEETINGS : hosts
-    USERS ||--o{ PARTICIPANTS : attends
-    MEETINGS ||--|| MEETING_SETTINGS : configures
-    MEETINGS ||--o{ PARTICIPANTS : includes
-    PARTICIPANTS ||--o{ PARTICIPANTS : removes
-
-    USERS {
-        string id PK "ULID Primary Key"
-        string email UK "Lowercased unique email"
-        string name "Full display name"
-        string password_hash "Argon2id hash"
-        string personal_meeting_id UK "10-digit static PMI"
-        string timezone "User timezone"
-        string plan "Account tier"
-        boolean is_demo "Demo mode flag"
-        datetime created_at "UTC Timestamp"
-    }
-
-    MEETINGS {
-        string id PK "ULID Primary Key"
-        string meeting_code UK "10-digit numeric code"
-        string host_id FK "References users.id"
-        string title "Meeting topic"
-        string kind "instant | scheduled | personal"
-        string status "scheduled | live | ended | cancelled"
-        datetime scheduled_start_at "Scheduled UTC start"
-        int duration_minutes "Planned duration"
-        string timezone "Meeting timezone"
-        string passcode "Optional access code"
-        datetime started_at "Actual start timestamp"
-        datetime ended_at "Actual end timestamp"
-    }
-
-    MEETING_SETTINGS {
-        string meeting_id PK,FK "References meetings.id"
-        boolean host_video_on "Initial host video state"
-        boolean participant_video_on "Initial participant video state"
-        boolean mute_on_entry "Auto-mute participants"
-        boolean join_before_host "Allow early arrival"
-        boolean waiting_room "Enable waiting room gate"
-        boolean allow_self_unmute "Participant unmute permission"
-        boolean chat_enabled "In-meeting chat permission"
-    }
-
-    PARTICIPANTS {
-        string id PK "ULID Primary Key"
-        string meeting_id FK "References meetings.id"
-        string user_id FK "Nullable for guest users"
-        string display_name "Session display name"
-        string role "host | co_host | participant"
-        string status "joined | left | removed"
-        datetime joined_at "Join timestamp"
-        datetime left_at "Leave timestamp"
-        string removed_by FK "References participants.id"
-    }
-```
+![Database Schema](images/schema.png)
 
 ### Schema Design Decisions
 * **1:1 Settings Separation**: Extracted `meeting_settings` into a dedicated table linked by foreign key to keep the `meetings` table narrow and optimized for frequent list and dashboard queries.
@@ -186,34 +80,7 @@ erDiagram
 
 WebSocket communication coordinates room state synchronization, WebRTC signaling exchange, in-meeting chat, floating emoji reactions, and server-enforced host controls.
 
-```mermaid
-graph LR
-    subgraph Client Actions
-        Host[Host Client]
-        Participant[Participant Client]
-    end
-
-    subgraph WebSocket Gateway
-        WSGateway[WebSocket Connection Manager]
-    end
-
-    subgraph Message Types
-        Signaling["WebRTC Signaling (Offer / Answer / ICE)"]
-        Chat["In-Meeting Chat Broadcast"]
-        Reaction["Floating Reaction Broadcast"]
-        HostControls["Host Commands (Mute All / Remove)"]
-    end
-
-    Host -->|host.mute_all / host.remove| WSGateway
-    Participant -->|chat.message / reaction.send| WSGateway
-    WSGateway --> HostControls
-    WSGateway --> Chat
-    WSGateway --> Reaction
-    WSGateway --> Signaling
-    HostControls -->|participant.removed| Participant
-    Chat -->|chat.message| Host
-    Chat -->|chat.message| Participant
-```
+![Real-Time WebSockets and Host Controls](images/RTC_and_host_control.png)
 
 ### Real-Time Features
 * **Single-Use WebSocket Tickets**: Tickets expire after 30 seconds and are verified on connection handshake, preventing credentials from leaking in URL logs.
@@ -296,28 +163,7 @@ graph LR
 
 The application exposes a unified REST and WebSocket API gateway under `/api/v1`. Client interactions transition through authentication, meeting provisioning, and real-time room communication.
 
-```mermaid
-graph TD
-    Client["Web Client"]
-
-    API["REST API<br/>/api/v1"]
-    Auth["Authentication<br/>& Profile"]
-    Meetings["Meeting Management"]
-    Realtime["Real-Time Communication<br/>WebSocket"]
-
-    Client --> API
-
-    API --> Auth
-    API --> Meetings
-    API --> Realtime
-
-    Auth --> DB[("Database")]
-    Meetings --> DB
-    Realtime --> Room["Meeting Room<br/>/{code}"]
-
-    Auth -. "JWT / Session Cookies" .-> Meetings
-    Meetings -. "WebSocket Ticket" .-> Realtime
-```
+![High-Level API Architecture](images/high_level_api_architecture.png)
 
 ---
 
@@ -325,37 +171,7 @@ graph TD
 
 Manages user registration via email OTP verification, password login with rotating JWT session cookies, and user profile discovery.
 
-```mermaid
-graph TD
-    Auth["Authentication & Profile"]
-
-    Profile["Profile"]
-    Login["Login"]
-    Register["Registration"]
-    Session["Session Management"]
-
-    Auth --> Profile
-    Auth --> Login
-    Auth --> Register
-    Auth --> Session
-
-    Profile --> P1["GET /users/me"]
-
-    Login --> L1["POST /auth/login"]
-
-    Register --> R1["POST /auth/register/request-otp"]
-    Register --> R2["POST /auth/register/verify-otp"]
-
-    Session --> S1["POST /auth/refresh"]
-    Session --> S2["POST /auth/logout"]
-
-    R1 --> OTP["6-digit Email OTP"]
-    R2 --> User["Provision User Account"]
-
-    L1 --> Cookies["JWT httpOnly Cookies"]
-    S1 --> Cookies
-    S2 --> Cookies
-```
+![Authentication and Profile API](images/authentication_and_profile_api.png)
 
 #### Authentication Endpoints & Contracts
 * `GET /api/v1/users/me` (or `/api/v1/me`) - Returns authenticated user data, Personal Meeting ID, and active plan tier.
@@ -381,38 +197,7 @@ Handles instant room creation, meeting scheduling, portal history queries, pre-j
 * `POST /api/v1/meetings/{code}/end` - Host action transitioning meeting status to `ended` and recording `ended_at`.
 * `GET /api/v1/meetings/{code}/participants` - Lists all participant attendance rows for the meeting.
 
-```mermaid
-graph TD
-    Meetings["Meeting Management"]
-
-    Create["Create Meeting"]
-    Browse["Meeting History"]
-    Manage["Host Management"]
-    Join["Participant Join"]
-
-    Meetings --> Create
-    Meetings --> Browse
-    Meetings --> Manage
-    Meetings --> Join
-
-    Create --> I["POST /meetings/instant<br/>Instant Meeting"]
-    Create --> S["POST /meetings<br/>Scheduled Meeting"]
-
-    Browse --> U["GET /meetings?scope=upcoming"]
-    Browse --> P["GET /meetings?scope=previous"]
-
-    Manage --> M["GET /meetings/{code}<br/>Host Details"]
-
-    Join --> Public["GET /meetings/{code}/public<br/>Validate Meeting"]
-    Join --> Record["POST /meetings/{code}/join<br/>Record Attendance"]
-
-    Public --> Check{"Meeting Valid?"}
-    Check -->|Yes| Passcode["Passcode Check"]
-    Check -->|No| Reject["Reject (404/Ended)"]
-
-    Passcode --> Record
-    Record --> Ticket["WebSocket Connection Ticket"]
-```
+![Meeting Management API](images/meeting_management_api.png)
 
 ---
 
@@ -420,37 +205,7 @@ graph TD
 
 Coordinates peer presence, WebRTC mesh signaling exchange, in-meeting chat, and server-enforced host controls over full-duplex WebSockets.
 
-```mermaid
-graph TD
-    Client["Meeting Client"]
-
-    Ticket["WebSocket Ticket"]
-    WS["WS /ws/rooms/{code}"]
-
-    Room["Meeting Room"]
-
-    Presence["Presence"]
-    WebRTC["WebRTC Signaling"]
-    Chat["Chat Messages"]
-    Reactions["Reactions"]
-    Moderation["Host Moderation"]
-
-    Client -->|1. Join Meeting| Ticket
-    Ticket -->|2. Connect| WS
-    WS --> Room
-
-    Room --> Presence
-    Room --> WebRTC
-    Room --> Chat
-    Room --> Reactions
-    Room --> Moderation
-
-    Presence --> P1["Join / Leave<br/>Participant Roster"]
-    WebRTC --> W1["Offer / Answer / ICE"]
-    Chat --> C1["Room Messages"]
-    Reactions --> R1["Emoji Reactions"]
-    Moderation --> M1["Mute All / Remove Participant"]
-```
+![Real-Time Communication and WebSocket Protocol](images/RTC_and_Websocket_protocol.png)
 
 #### Real-Time Event Catalog
 * `room.snapshot`: Initial state payload dispatched upon connection, providing the full participant roster and media states.
