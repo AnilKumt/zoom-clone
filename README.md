@@ -17,12 +17,15 @@ A full-stack Zoom web application clone built with Next.js, FastAPI, SQLite, and
 
 ## Tech Stack Overview
 
-* **Frontend**: Next.js 14+ (App Router, Single Page Application mode, TypeScript)
-* **Backend**: Python 3.12, FastAPI (Asynchronous), Uvicorn ASGI
-* **Database**: SQLite with Write-Ahead Logging (WAL) mode, SQLAlchemy 2.0 (Async), Alembic
-* **Real-Time & Ephemeral State**: Redis (Upstash) with in-memory fallback for local development
-* **Audio / Video Streaming**: WebRTC Peer-to-Peer Mesh (decoupled audio element architecture)
-* **UI & Styling**: Tailwind CSS, Material Design 3 surface tokens, Radix UI, Lucide Icons, Sonner
+| Architecture Layer | Technologies & Ecosystem |
+| :--- | :--- |
+| **Frontend Web Client** | **Next.js 14+** (App Router, SPA Mode) · **TypeScript** · **React 18** <br/> <a href="https://nextjs.org"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/nextjs/nextjs-original.svg" width="24" height="24" alt="Next.js" /></a> &nbsp; <a href="https://www.typescriptlang.org"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/typescript/typescript-original.svg" width="24" height="24" alt="TypeScript" /></a> &nbsp; <a href="https://react.dev"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/react/react-original.svg" width="24" height="24" alt="React" /></a> |
+| **UI & Component Design** | **Tailwind CSS** · Material Design 3 Tokens · Radix UI · Lucide Icons · Sonner <br/> <a href="https://tailwindcss.com"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/tailwindcss/tailwindcss-original.svg" width="24" height="24" alt="Tailwind CSS" /></a> |
+| **Backend REST & WS API** | **Python 3.12** · **FastAPI** (Asynchronous) · Uvicorn ASGI Server <br/> <a href="https://www.python.org"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/python/python-original.svg" width="24" height="24" alt="Python" /></a> &nbsp; <a href="https://fastapi.tiangolo.com"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/fastapi/fastapi-original.svg" width="24" height="24" alt="FastAPI" /></a> |
+| **Database & Persistence** | **SQLite** (Write-Ahead Logging / WAL) · **SQLAlchemy 2.0 Async** · Alembic <br/> <a href="https://www.sqlite.org"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/sqlite/sqlite-original.svg" width="24" height="24" alt="SQLite" /></a> &nbsp; <a href="https://www.sqlalchemy.org"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/sqlalchemy/sqlalchemy-plain.svg" width="24" height="24" alt="SQLAlchemy" /></a> |
+| **Real-Time & Ephemeral State** | **Full-Duplex WebSockets** · **Redis** (Upstash) + Local In-Memory Fallback Store <br/> <a href="https://redis.io"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/redis/redis-original.svg" width="24" height="24" alt="Redis" /></a> &nbsp; <a href="https://socket.io"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/socketio/socketio-original.svg" width="24" height="24" alt="WebSockets" /></a> |
+| **Audio / Video Streaming** | **WebRTC Peer-to-Peer Mesh** · Decoupled Audio Element Media Pipeline <br/> <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/html5/html5-original.svg" width="24" height="24" alt="WebRTC Media" /></a> |
+| **DevOps & Containerization** | **Docker** & **Docker Compose** · Netlify (Web) · Render (API) · GitHub Actions <br/> <a href="https://www.docker.com"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/docker/docker-original.svg" width="24" height="24" alt="Docker" /></a> &nbsp; <a href="https://git-scm.com"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/git/git-original.svg" width="24" height="24" alt="Git" /></a> |
 
 ---
 
