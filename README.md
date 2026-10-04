@@ -292,49 +292,173 @@ graph LR
 <details>
 <summary><b>6. API Specifications</b></summary>
 
+### 6.1 High-Level API Architecture
+
+The application exposes a unified REST and WebSocket API gateway under `/api/v1`. Client interactions transition through authentication, meeting provisioning, and real-time room communication.
+
 ```mermaid
 graph TD
-    Root["/api/v1"]
-    Root --> Users["/users"]
-    Root --> Auth["/auth"]
-    Root --> Meetings["/meetings"]
-    Root --> WS["/ws/rooms/{code}"]
+    Client["Web Client"]
 
-    Users --> U1["GET /me"]
-    Auth --> A1["POST /login"]
-    Auth --> A2["POST /register/request-otp"]
-    Auth --> A3["POST /register/verify-otp"]
-    Auth --> A4["POST /refresh"]
-    Auth --> A5["POST /logout"]
+    API["REST API<br/>/api/v1"]
+    Auth["Authentication<br/>& Profile"]
+    Meetings["Meeting Management"]
+    Realtime["Real-Time Communication<br/>WebSocket"]
 
-    Meetings --> M1["POST /instant"]
-    Meetings --> M2["POST /"]
-    Meetings --> M3["GET /?scope=upcoming"]
-    Meetings --> M4["GET /{code}"]
-    Meetings --> M5["GET /{code}/public"]
-    Meetings --> M6["POST /{code}/join"]
+    Client --> API
+
+    API --> Auth
+    API --> Meetings
+    API --> Realtime
+
+    Auth --> DB[("Database")]
+    Meetings --> DB
+    Realtime --> Room["Meeting Room<br/>/{code}"]
+
+    Auth -. "JWT / Session Cookies" .-> Meetings
+    Meetings -. "WebSocket Ticket" .-> Realtime
 ```
 
-### Core API Endpoints
+---
 
-#### Authentication & Profile
-* `GET /api/v1/users/me` - Fetch authenticated user profile and Personal Meeting ID.
-* `POST /api/v1/auth/login` - Authenticate credentials and issue JWT httpOnly session cookies.
-* `POST /api/v1/auth/register/request-otp` - Request 6-digit email registration code.
-* `POST /api/v1/auth/register/verify-otp` - Verify code and provision user account.
-* `POST /api/v1/auth/refresh` - Rotate access and refresh session tokens.
-* `POST /api/v1/auth/logout` - Invalidate session and clear authorization cookies.
+### 6.2 Authentication & Profile API
 
-#### Meetings Management
-* `POST /api/v1/meetings/instant` - Provision an instant meeting room and return invite link.
-* `POST /api/v1/meetings` - Schedule a meeting with custom start time, duration, and settings.
-* `GET /api/v1/meetings?scope={upcoming|previous}` - List meetings for the current user.
-* `GET /api/v1/meetings/{code}` - Retrieve host meeting management details.
-* `GET /api/v1/meetings/{code}/public` - Public endpoint validating meeting status and passcode requirements.
-* `POST /api/v1/meetings/{code}/join` - Record participant attendance and issue WebSocket connection ticket.
+Manages user registration via email OTP verification, password login with rotating JWT session cookies, and user profile discovery.
 
-#### Real-Time WebSocket
-* `WS /api/v1/ws/rooms/{code}?ticket={ticket}` - Full-duplex room connection handling presence rosters, WebRTC signals, chat messages, reactions, and host moderation events.
+```mermaid
+graph TD
+    Auth["Authentication & Profile"]
+
+    Profile["Profile"]
+    Login["Login"]
+    Register["Registration"]
+    Session["Session Management"]
+
+    Auth --> Profile
+    Auth --> Login
+    Auth --> Register
+    Auth --> Session
+
+    Profile --> P1["GET /users/me"]
+
+    Login --> L1["POST /auth/login"]
+
+    Register --> R1["POST /auth/register/request-otp"]
+    Register --> R2["POST /auth/register/verify-otp"]
+
+    Session --> S1["POST /auth/refresh"]
+    Session --> S2["POST /auth/logout"]
+
+    R1 --> OTP["6-digit Email OTP"]
+    R2 --> User["Provision User Account"]
+
+    L1 --> Cookies["JWT httpOnly Cookies"]
+    S1 --> Cookies
+    S2 --> Cookies
+```
+
+#### Authentication Endpoints & Contracts
+* `GET /api/v1/users/me` (or `/api/v1/me`) - Returns authenticated user data, Personal Meeting ID, and active plan tier.
+* `POST /api/v1/auth/register/request-otp` - Initiates account creation by generating an HMAC-hashed 6-digit verification code.
+* `POST /api/v1/auth/register/verify-otp` - Verifies the submitted OTP and creates the user in SQLite.
+* `POST /api/v1/auth/login` - Validates email and Argon2id password hash, setting `access_token` and `refresh_token` httpOnly cookies.
+* `POST /api/v1/auth/refresh` - Rotates expired access tokens using a valid refresh token.
+* `POST /api/v1/auth/logout` - Revokes refresh session and clears authentication cookies.
+
+---
+
+### 6.3 Meeting Management API
+
+Handles instant room creation, meeting scheduling, portal history queries, pre-join validation, and participant attendance recording.
+
+#### Meeting Endpoints & Query Parameters
+* `POST /api/v1/meetings/instant` - Generates a 10-digit meeting ID, creates an active meeting row, and returns a shareable invite URL.
+* `POST /api/v1/meetings` (or `/api/v1/meetings/schedule`) - Validates scheduled start time, duration, timezone, and custom entry settings.
+* `GET /api/v1/meetings?scope=upcoming` (or `?type=upcoming`) - Returns scheduled meetings where `scheduled_start_at >= now`.
+* `GET /api/v1/meetings?scope=previous` (or `?type=recent`) - Returns completed meetings where `status = ended` ordered chronologically.
+* `GET /api/v1/meetings/{code}/public` - Public pre-join check verifying existence, live status, host name, and passcode requirement.
+* `POST /api/v1/meetings/{code}/join` - Creates an attendance record in `participants` and mints a 30-second single-use WebSocket ticket.
+* `POST /api/v1/meetings/{code}/end` - Host action transitioning meeting status to `ended` and recording `ended_at`.
+* `GET /api/v1/meetings/{code}/participants` - Lists all participant attendance rows for the meeting.
+
+```mermaid
+graph TD
+    Meetings["Meeting Management"]
+
+    Create["Create Meeting"]
+    Browse["Meeting History"]
+    Manage["Host Management"]
+    Join["Participant Join"]
+
+    Meetings --> Create
+    Meetings --> Browse
+    Meetings --> Manage
+    Meetings --> Join
+
+    Create --> I["POST /meetings/instant<br/>Instant Meeting"]
+    Create --> S["POST /meetings<br/>Scheduled Meeting"]
+
+    Browse --> U["GET /meetings?scope=upcoming"]
+    Browse --> P["GET /meetings?scope=previous"]
+
+    Manage --> M["GET /meetings/{code}<br/>Host Details"]
+
+    Join --> Public["GET /meetings/{code}/public<br/>Validate Meeting"]
+    Join --> Record["POST /meetings/{code}/join<br/>Record Attendance"]
+
+    Public --> Check{"Meeting Valid?"}
+    Check -->|Yes| Passcode["Passcode Check"]
+    Check -->|No| Reject["Reject (404/Ended)"]
+
+    Passcode --> Record
+    Record --> Ticket["WebSocket Connection Ticket"]
+```
+
+---
+
+### 6.4 Real-Time Communication & WebSocket Protocol
+
+Coordinates peer presence, WebRTC mesh signaling exchange, in-meeting chat, and server-enforced host controls over full-duplex WebSockets.
+
+```mermaid
+graph TD
+    Client["Meeting Client"]
+
+    Ticket["WebSocket Ticket"]
+    WS["WS /ws/rooms/{code}"]
+
+    Room["Meeting Room"]
+
+    Presence["Presence"]
+    WebRTC["WebRTC Signaling"]
+    Chat["Chat Messages"]
+    Reactions["Reactions"]
+    Moderation["Host Moderation"]
+
+    Client -->|1. Join Meeting| Ticket
+    Ticket -->|2. Connect| WS
+    WS --> Room
+
+    Room --> Presence
+    Room --> WebRTC
+    Room --> Chat
+    Room --> Reactions
+    Room --> Moderation
+
+    Presence --> P1["Join / Leave<br/>Participant Roster"]
+    WebRTC --> W1["Offer / Answer / ICE"]
+    Chat --> C1["Room Messages"]
+    Reactions --> R1["Emoji Reactions"]
+    Moderation --> M1["Mute All / Remove Participant"]
+```
+
+#### Real-Time Event Catalog
+* `room.snapshot`: Initial state payload dispatched upon connection, providing the full participant roster and media states.
+* `participant.joined` / `participant.left`: Real-time roster updates broadcast to all connected attendees.
+* `rtc.offer` / `rtc.answer` / `rtc.ice`: Targeted WebRTC peer connection signaling payloads.
+* `chat.message`: In-meeting text message broadcast carrying sender identity, message content, and timestamps.
+* `reaction.received`: Ephemeral floating emoji animation events displayed across video tiles.
+* `host.muted_all` / `participant.removed`: Server-validated host commands triggering client state enforcement and disconnection.
 
 </details>
 
