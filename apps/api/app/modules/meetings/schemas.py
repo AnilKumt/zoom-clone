@@ -97,6 +97,18 @@ class JoinMeetingResponse(BaseModel):
     ice_servers: list[dict]  # type: ignore[type-arg]
 
 
+class ParticipantResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    meeting_id: str
+    user_id: str | None
+    display_name: str
+    role: str
+    status: str
+    joined_at: datetime
+    left_at: datetime | None
+
+
 class MeetingListResponse(BaseModel):
     items: list[MeetingResponse]
     next_cursor: str | None

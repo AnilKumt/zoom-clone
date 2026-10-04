@@ -118,6 +118,76 @@ class MeetingService:
         await invalidate_public_meeting(code, self._cache)
         return meeting
 
+    async def end(self, code: str, user: User) -> Meeting:
+        """End a live meeting (host-only)."""
+        meeting = await self.get_by_code(code, user)
+        meeting.status = "ended"
+        meeting.ended_at = datetime.now(UTC)
+        # Update any currently joined participant rows
+        part_result = await self._db.execute(
+            select(Participant).where(
+                Participant.meeting_id == meeting.id,
+                Participant.status == "joined",
+            )
+        )
+        for p in part_result.scalars().all():
+            p.status = "left"
+            p.left_at = datetime.now(UTC)
+
+        await self._db.commit()
+        await self._db.refresh(meeting)
+        await invalidate_public_meeting(code, self._cache)
+        return meeting
+
+    async def list_participants(self, code: str) -> list[Participant]:
+        """List active or all participants for a given meeting."""
+        meeting = await self._get_by_code(code)
+        if not meeting:
+            raise NotFoundError("Meeting", code)
+        result = await self._db.execute(
+            select(Participant)
+            .where(Participant.meeting_id == meeting.id)
+            .order_by(Participant.joined_at)
+        )
+        return list(result.scalars().all())
+
+    async def leave(self, code: str, participant_id: str) -> bool:
+        """Mark a participant as left."""
+        meeting = await self._get_by_code(code)
+        if not meeting:
+            raise NotFoundError("Meeting", code)
+        result = await self._db.execute(
+            select(Participant).where(
+                Participant.id == participant_id,
+                Participant.meeting_id == meeting.id,
+            )
+        )
+        participant = result.scalar_one_or_none()
+        if participant and participant.status == "joined":
+            participant.status = "left"
+            participant.left_at = datetime.now(UTC)
+            await self._db.commit()
+            return True
+        return False
+
+    async def remove_participant(self, code: str, participant_id: str, host_user: User) -> bool:
+        """Remove a participant from the meeting (host-only)."""
+        meeting = await self.get_by_code(code, host_user)
+        result = await self._db.execute(
+            select(Participant).where(
+                Participant.id == participant_id,
+                Participant.meeting_id == meeting.id,
+            )
+        )
+        participant = result.scalar_one_or_none()
+        if participant:
+            participant.status = "removed"
+            participant.left_at = datetime.now(UTC)
+            participant.removed_by = host_user.id
+            await self._db.commit()
+            return True
+        return False
+
     async def list_upcoming(self, user: User, limit: int = 20) -> list[Meeting]:
         now = datetime.now(UTC)
         result = await self._db.execute(

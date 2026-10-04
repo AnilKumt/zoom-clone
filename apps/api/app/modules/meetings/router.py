@@ -89,6 +89,7 @@ async def create_instant_meeting(
 
 
 @router.post("", response_model=MeetingResponse, status_code=201)
+@router.post("/schedule", response_model=MeetingResponse, status_code=201)
 async def schedule_meeting(
     request: Request,
     dto: ScheduleMeetingRequest,
@@ -108,13 +109,15 @@ async def schedule_meeting(
 
 @router.get("", response_model=MeetingListResponse)
 async def list_meetings(
-    scope: str = "upcoming",
+    scope: str | None = None,
+    type: str | None = None,
     limit: int = 20,
     current_user: User = Depends(get_current_user),
     service: MeetingService = Depends(get_meeting_service),
 ) -> MeetingListResponse:
     settings = get_settings()
-    if scope == "upcoming":
+    selected_scope = scope or type or "upcoming"
+    if selected_scope in ("upcoming", "scheduled"):
         meetings = await service.list_upcoming(current_user, limit)
     else:
         meetings = await service.list_previous(current_user, limit)
@@ -142,6 +145,78 @@ async def start_meeting(
     meeting = await service.start(code, current_user)
     settings = get_settings()
     return MeetingResponse.from_meeting(meeting, settings.web_base_url)
+
+
+@router.post("/{code}/end", response_model=MeetingResponse)
+async def end_meeting(
+    code: str,
+    current_user: User = Depends(get_current_user),
+    service: MeetingService = Depends(get_meeting_service),
+) -> MeetingResponse:
+    """End meeting for all participants (host control)."""
+    meeting = await service.end(code, current_user)
+    settings = get_settings()
+    return MeetingResponse.from_meeting(meeting, settings.web_base_url)
+
+
+@router.post("/{code}/leave")
+async def leave_meeting(
+    code: str,
+    participant_id: str | None = None,
+    current_user: User | None = Depends(get_optional_user),
+    service: MeetingService = Depends(get_meeting_service),
+) -> dict:
+    """Mark participant as left."""
+    target_id = participant_id or (current_user.id if current_user else "")
+    if target_id:
+        await service.leave(code, target_id)
+    return {"status": "ok", "message": "Left meeting"}
+
+
+@router.get("/{code}/participants")
+async def get_participants(
+    code: str,
+    service: MeetingService = Depends(get_meeting_service),
+) -> list[dict]:
+    """List participants for a meeting."""
+    participants = await service.list_participants(code)
+    return [
+        {
+            "id": p.id,
+            "display_name": p.display_name,
+            "role": p.role,
+            "status": p.status,
+            "joined_at": p.joined_at,
+            "left_at": p.left_at,
+        }
+        for p in participants
+    ]
+
+
+@router.post("/{code}/mute-all")
+async def mute_all_participants(
+    code: str,
+    current_user: User = Depends(get_current_user),
+    service: MeetingService = Depends(get_meeting_service),
+    kv_store: KeyValueStore = Depends(get_kv_store),
+) -> dict:
+    """Host control: Mute all participants."""
+    await service.get_by_code(code, current_user)
+    # Broadcast mute_all to WebSocket channel if pubsub active
+    await kv_store.publish(f"room:{code}:broadcast", json.dumps({"type": "host.muted_all", "payload": {}}))
+    return {"status": "ok", "message": "All participants muted"}
+
+
+@router.delete("/{code}/participants/{participant_id}")
+async def remove_participant_endpoint(
+    code: str,
+    participant_id: str,
+    current_user: User = Depends(get_current_user),
+    service: MeetingService = Depends(get_meeting_service),
+) -> dict:
+    """Host control: Remove a participant."""
+    removed = await service.remove_participant(code, participant_id, current_user)
+    return {"status": "ok" if removed else "not_found", "participant_id": participant_id}
 
 
 @router.get("/{code}", response_model=MeetingResponse)

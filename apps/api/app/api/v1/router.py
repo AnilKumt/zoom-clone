@@ -50,3 +50,4 @@ api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(users_router, prefix="/users", tags=["users"])
 api_router.include_router(meetings_router, prefix="/meetings", tags=["meetings"])
 api_router.include_router(rooms_router, prefix="", tags=["rooms"])
+api_router.add_api_route("/me", users_router.routes[0].endpoint, methods=["GET"], tags=["users"], response_model=users_router.routes[0].response_model)  # type: ignore[arg-type]
