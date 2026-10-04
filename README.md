@@ -96,12 +96,34 @@ WebSocket communication coordinates room state synchronization, WebRTC signaling
 <summary><b>5. Setup and Operations</b></summary>
 
 ### Prerequisites
-* Python 3.12 or higher
-* Node.js 20 or higher (with npm)
+* Docker & Docker Compose **OR** Local Node.js 20+ and Python 3.12+
 * Git
 
-### Backend Setup
-1. Navigate to the API application directory:
+---
+
+### Option A: Docker Compose (Recommended Quickstart)
+Run the entire platform (Next.js web client, FastAPI backend, Redis, and seeded SQLite volume) with a single command:
+
+1. Clone the repository and navigate to the project root:
+   ```bash
+   git clone https://github.com/AnilKumt/zoom-clone.git
+   cd zoom-clone
+   ```
+2. Build and launch all services in the background:
+   ```bash
+   docker compose up --build
+   ```
+3. Access the services:
+   * **Web Client**: http://localhost:3000
+   * **API Docs / Swagger**: http://localhost:8000/docs
+   * **Redis Instance**: localhost:6379
+
+---
+
+### Option B: Manual Local Setup
+
+#### 1. Backend Setup
+1. Navigate to the API directory:
    ```bash
    cd apps/api
    ```
@@ -133,8 +155,8 @@ WebSocket communication coordinates room state synchronization, WebRTC signaling
    python -m uvicorn app.main:app --reload --port 8000
    ```
 
-### Frontend Setup
-1. Navigate to the web application directory:
+#### 2. Frontend Setup
+1. Navigate to the web application directory in a new terminal:
    ```bash
    cd apps/web
    ```
